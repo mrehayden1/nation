@@ -1,5 +1,7 @@
 module Shaders (
-  loadShaders
+  ShaderLocation,
+
+  compileShaders
 ) where
 
 import Control.Monad
@@ -8,11 +10,16 @@ import qualified Graphics.Rendering.OpenGL as GL
 import Graphics.Rendering.OpenGL (GettableStateVar, get, ($=))
 import System.FilePath
 
-loadShaders :: IO GL.Program
-loadShaders = do
+type ShaderLocation = (FilePath, GL.ShaderType)
+
+{- Compiles a list of shader descriptions into a GL.Program
+ - where the shader description ("foo", VertexShader) would cause the shader
+ - "./shaders/foo.vert" to be loaded
+ -}
+compileShaders :: [ShaderLocation] -> IO GL.Program
+compileShaders shaders = do
   program <- GL.createProgram
-  loadShader program "shader" GL.FragmentShader
-  loadShader program "shader" GL.VertexShader
+  forM_ shaders . uncurry $ loadShader program
   linkAndCheckProgram program
   return program
  where

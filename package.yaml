@@ -22,9 +22,19 @@ description:         Nation the Game
 dependencies:
 - base >= 4.7 && < 5
 - bytestring
+- containers
+- dependent-sum
 - filepath
 - GLFW-b
+- JuicyPixels
+- lens
+- linear
+- monad-loops
 - OpenGL
+- reflex
+- time
+- vector
+- StateVar
 
 ghc-options:
 - -Wall
@@ -36,6 +46,12 @@ ghc-options:
 - -Wmissing-home-modules
 - -Wpartial-fields
 - -Wredundant-constraints
+
+default-extensions:
+- LambdaCase
+- RankNTypes
+- RecordWildCards
+- TupleSections
 
 executables:
   nation:

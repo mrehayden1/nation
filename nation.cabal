@@ -13,7 +13,6 @@ author:         Matthew Hayden
 maintainer:     example@example.com
 copyright:      2024 Matthew Hayden
 license:        AllRightsReserved
-license-file:   LICENSE
 build-type:     Simple
 extra-source-files:
     README.md
@@ -26,15 +25,39 @@ source-repository head
 executable nation
   main-is: Main.hs
   other-modules:
+      App
+      Camera
+      Cursor
+      Element
+      Matrix
+      Pipeline
       Shaders
+      Texture
+      Util
+      Vector
       Paths_nation
   hs-source-dirs:
       src
+  default-extensions:
+      LambdaCase
+      RankNTypes
+      RecordWildCards
+      TupleSections
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       GLFW-b
+    , JuicyPixels
     , OpenGL
+    , StateVar
     , base >=4.7 && <5
     , bytestring
+    , containers
+    , dependent-sum
     , filepath
+    , lens
+    , linear
+    , monad-loops
+    , reflex
+    , time
+    , vector
   default-language: Haskell2010
