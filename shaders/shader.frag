@@ -13,20 +13,31 @@ uniform mat4 viewM;
 
 float ShadowCalculation(vec4 clipPos)
 {
-    // TODO Improved bias calculation
-    float bias = 0.005; // remove shadow acne
+    // remove shadow acne
+    float bias = max(0.05 * (1.0 - dot(Normal, lightDirection)), 0.005);
 
     // perform perspective divide
     vec3 ndcCoords = clipPos.xyz / clipPos.w;
     // transform to [0,1] range
     vec3 mapCoords = ndcCoords * 0.5 + 0.5;
-    // get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
-    float closestDepth = texture(lightDepthMap, mapCoords.xy).r; 
-    // get depth of current fragment from light's perspective
-    float currentDepth = mapCoords.z;
-    // check whether current frag pos is in shadow
-    float shadow = currentDepth - bias > closestDepth ? 1.0 : 0.0;
-
+    float shadow = 0.0;
+    // If the depth of our point is greater than the depth the map has sampled
+    // then don't render any shadow.
+    if (mapCoords.z < 1.0) {
+      // get depth of current fragment from light's perspective
+      float currentDepth = mapCoords.z;
+      // calculate shadow using percentage close filtering
+      vec2 texelSize = 1.0 / textureSize(lightDepthMap, 0);
+      for(int x = -1; x <= 1; ++x)
+      {
+        for(int y = -1; y <= 1; ++y)
+        {
+          float pcfDepth = texture(lightDepthMap, mapCoords.xy + vec2(x, y) * texelSize).r;
+          shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
+        }
+      }
+      shadow /= 9.0;
+    }
     return shadow;
 }  
 
