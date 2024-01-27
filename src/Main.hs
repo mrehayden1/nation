@@ -3,12 +3,8 @@ module Main (
 ) where
 
 import Control.Exception
-import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Loops
-import Control.Monad.Ref
-import Data.Dependent.Sum
 import Data.IORef
 import Data.Maybe
 import Data.StateVar
@@ -23,10 +19,8 @@ import Reflex
 import Reflex.GLFW.Simple
 import Reflex.Host.Headless
 import Reflex.Network
-import System.Exit
 
 import App
-import Cursor
 import qualified Camera as Cam
 import Element
 import qualified Matrix as M
@@ -38,7 +32,7 @@ import Vector
 appName :: String
 appName = "Nation"
 
--- TODO Debugging build flag
+-- TODO Add debugging build flag
 debugging :: Bool
 debugging = True
 --debugging = False

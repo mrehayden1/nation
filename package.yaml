@@ -30,7 +30,6 @@ dependencies:
 - JuicyPixels
 - lens
 - linear
-- monad-loops
 - OpenGL
 - ref-tf
 - reflex

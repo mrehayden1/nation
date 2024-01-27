@@ -9,10 +9,8 @@ module App (
   app
 ) where
 
-import Control.Lens
 import Control.Monad
 import Control.Monad.Fix
-import Data.Fixed
 import Data.List (delete, insert)
 import Data.Time.Clock
 import Data.Tuple.Extra
