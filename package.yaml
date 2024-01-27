@@ -24,6 +24,7 @@ dependencies:
 - bytestring
 - containers
 - dependent-sum
+- extra
 - filepath
 - GLFW-b
 - JuicyPixels
@@ -31,7 +32,9 @@ dependencies:
 - linear
 - monad-loops
 - OpenGL
+- ref-tf
 - reflex
+- reflex-glfw-simple
 - time
 - vector
 - StateVar
@@ -48,10 +51,14 @@ ghc-options:
 - -Wredundant-constraints
 
 default-extensions:
+- FlexibleContexts
 - LambdaCase
 - RankNTypes
 - RecordWildCards
+- RecursiveDo
+- ScopedTypeVariables
 - TupleSections
+- TypeFamilies
 
 executables:
   nation:

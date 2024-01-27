@@ -8,8 +8,8 @@ module Cursor (
   defaultCursorPosition
 ) where
 
-type GLFWMouseX = Double
-type GLFWMouseY = Double
+type GLFWMouseX = Float
+type GLFWMouseY = Float
 
 type CursorPosition = (GLFWMouseX, GLFWMouseY)
 

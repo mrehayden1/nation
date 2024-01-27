@@ -34,16 +34,16 @@ type Vertices = [VertexUnit]
  - elements are rendered as triangles.
  -}
 data ElementSpec =
-    VertexElement Vertices
-  | IndexedElement Vertices [Index]
+    VertexElement GL.PrimitiveMode Vertices
+  | IndexedElement GL.PrimitiveMode Vertices [Index]
 
 {- Stores pointers to Vertex Array Objects and no. of vertices / indices which
  - OpenGL needs to draw simple vertex elements and indexed elements
  - respectively.
  - -}
 data RenderableElement =
-   RenderableVertices GL.VertexArrayObject Int
- | RenderableIndexed GL.VertexArrayObject Int
+   RenderableVertices GL.PrimitiveMode GL.VertexArrayObject Int
+ | RenderableIndexed GL.PrimitiveMode GL.VertexArrayObject Int
 
 stride :: Int
 stride = 6
@@ -94,7 +94,7 @@ cube =
          0.5,  0.5,  0.5,  0.0,  1.0,  0.0,
         -0.5,  0.5,  0.5,  0.0,  1.0,  0.0,
         -0.5,  0.5, -0.5,  0.0,  1.0,  0.0]
-  in VertexElement vertices
+  in VertexElement GL.Triangles vertices
 
 plane :: ElementSpec
 plane =
@@ -104,16 +104,16 @@ plane =
         -10, -1,  10,  0,  1,  0,
         -10, -1, -10,  0,  1,  0]
       indices = [0, 1, 2, 0, 2, 3]
-  in IndexedElement vertices indices
+  in IndexedElement GL.Triangles vertices indices
 
 createSceneElements :: IO [RenderableElement]
 createSceneElements = mapM createElement [cube, plane]
 
 createElement :: ElementSpec -> IO RenderableElement
 createElement spec = do
-  let (vertices, mIndices) = case spec of
-        VertexElement  vs    -> (vs, Nothing)
-        IndexedElement vs is -> (vs, Just is)
+  let (primitiveMode, vertices, mIndices) = case spec of
+        VertexElement  pm vs    -> (pm, vs, Nothing)
+        IndexedElement pm vs is -> (pm, vs, Just is)
   -- Create and bind vertex array object before our vertex and element buffers
   vertexArrayObject <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vertexArrayObject
@@ -146,13 +146,13 @@ createElement spec = do
   -- Unbind the vertex array object
   GL.bindVertexArrayObject $= Nothing
   return $ case mIndices of
-    Just indices -> RenderableIndexed vertexArrayObject . length $ indices
-    Nothing      -> RenderableVertices vertexArrayObject $ length vertices `div` stride
+    Just indices -> RenderableIndexed primitiveMode vertexArrayObject . length $ indices
+    Nothing      -> RenderableVertices primitiveMode vertexArrayObject $ length vertices `div` stride
 
 renderElement :: RenderableElement -> IO ()
-renderElement (RenderableVertices vertexArrayObject vertices) = do
+renderElement (RenderableVertices primitveMode vertexArrayObject vertices) = do
   GL.bindVertexArrayObject $= Just vertexArrayObject
-  GL.drawArrays GL.Triangles 0 . fromIntegral $ vertices
-renderElement (RenderableIndexed vertexArrayObject indices) = do
+  GL.drawArrays primitveMode 0 . fromIntegral $ vertices
+renderElement (RenderableIndexed primitiveMode vertexArrayObject indices) = do
   GL.bindVertexArrayObject $= Just vertexArrayObject
-  GL.drawElements GL.Triangles (fromIntegral indices) GL.UnsignedInt nullPtr
+  GL.drawElements primitiveMode (fromIntegral indices) GL.UnsignedInt nullPtr

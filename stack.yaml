@@ -43,8 +43,8 @@ extra-deps:
 - commutative-semigroups-0.1.0.1
 - patch-0.0.8.2
 - reflex-0.9.2.0
-- ../buttdemon/buttdemon
-- ../buttdemon/easytensor/easytensor
+- git: git@github.com:vagarenko/reflex-glfw-simple.git
+  commit: 64bafffabaf83e0cd2045a8da5ecd8bdef401cee
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
