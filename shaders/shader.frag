@@ -1,9 +1,9 @@
 #version 460 core
-out vec4 FragColor;
-
 in vec4 LightClipPosition;
 in vec3 Normal; // In view space
 in vec3 WorldPosition;
+
+out vec4 FragColor;
 
 uniform sampler2D lightDepthMap;
 
@@ -28,15 +28,18 @@ float ShadowCalculation(vec4 clipPos)
       float currentDepth = mapCoords.z;
       // calculate shadow using percentage close filtering
       vec2 texelSize = 1.0 / textureSize(lightDepthMap, 0);
-      for(int x = -1; x <= 1; ++x)
+      int pcfWidth = 3;
+      int pcfXYMin = -(pcfWidth - 1) / 2;
+      int pcfXYMax = pcfWidth / 2;
+      for(int x = pcfXYMin; x <= pcfXYMax; ++x)
       {
-        for(int y = -1; y <= 1; ++y)
+        for(int y = pcfXYMin; y <= pcfXYMax; ++y)
         {
           float pcfDepth = texture(lightDepthMap, mapCoords.xy + vec2(x, y) * texelSize).r;
           shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
         }
       }
-      shadow /= 9.0;
+      shadow /= pow(pcfWidth, 2);
     }
     return shadow;
 }  
