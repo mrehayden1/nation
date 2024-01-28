@@ -38,8 +38,8 @@ debugging = True
 --debugging = False
 
 windowWidth, windowHeight :: Int
-windowWidth = 1024
-windowHeight = 1024
+windowWidth = 1920
+windowHeight = 1080
 
 depthMapWidth, depthMapHeight, depthMapTextureImageLevel :: GL.GLsizei
 depthMapWidth = 2048
@@ -82,7 +82,7 @@ perspectiveProjection :: Floating a => L.M44 a
 perspectiveProjection = L.perspective (fov * pi / 180) aspectRatio near far
  where
   fov = 45
-  aspectRatio = 1
+  aspectRatio = realToFrac windowWidth / realToFrac windowHeight
   near = 0.1
   far = 100
 
