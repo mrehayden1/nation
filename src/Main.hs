@@ -292,11 +292,11 @@ createDebugTextOverlayer env timeRef = do
       writeIORef deltasRef []
     (_, fps) <- fmap fromJust . readIORef $ fpsRef
     -- TODO Text position dependent on aspect ratio
-    fpsText <- createDebugText font 0.02 (-0.975, -0.54) . (++ " FPS") . show
+    fpsText <- createDebugText font 0.02 (-0.975, 0.52) . (++ " FPS") . show
       $ (round fps :: Int)
     renderText fpsText
     deleteText fpsText
-    positionText <- createDebugText font 0.02 (-0.975, -0.52)
+    positionText <- createDebugText font 0.02 (-0.975,  0.5)
       . uncurry (printf "x:%s, y: 0.0, z:%s")
       . both (printf "% .6f" :: PosX -> String)
       $ playerPosition

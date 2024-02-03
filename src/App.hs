@@ -78,6 +78,9 @@ defaultCamera = Cam.Camera {
   Cam.yaw = negate $ pi / 2
 }
 
+playerStart :: Floating a => (a, a)
+playerStart = (0, 0)
+
 -- World units per second
 playerSpeed :: Floating a => a
 playerSpeed = 2
@@ -115,7 +118,7 @@ game eInput = do
   debugInfoOn <- toggle debugInfoEnabledDefault
     . ffilter (elem toggleDebugInfoKey)
     $ keyPresses
-  playerPosition <- foldDyn (uncurry . flip $ updatePlayerPosition) (0, 0)
+  playerPosition <- foldDyn (uncurry . flip $ updatePlayerPosition) playerStart
     . gate (fmap not . current $ debugCameraOn)
     . updated $ (,) <$> heldKeys <*> delta
   let playerCamera = fmap (uncurry playerPositionCamera) playerPosition
@@ -124,7 +127,8 @@ game eInput = do
   ambientLight <- holdDyn 0
     . fmap ((* 0.1) . max 0 . sin . realToFrac . time)
     $ eInput
-  sunPitch <- foldDyn updateLightDirection (pi / 2) . updated $ heldKeys
+  sunPitch <- foldDyn (uncurry updateLightDirection) (pi / 2) . updated
+    $ (,) <$> delta <*> heldKeys
   let sunDirection = fmap lightDirection sunPitch
       worldState = WorldState
         <$> ambientLight
@@ -164,16 +168,17 @@ game eInput = do
         lz = sin yaw * cos pitch
     in L.normalize $ L.V3 lx ly lz
 
-  updateLightDirection :: HeldKeys -> Float -> Float
-  updateLightDirection keys direction = (+ direction) . sum
+  updateLightDirection :: DeltaT -> HeldKeys -> Float -> Float
+  updateLightDirection deltaT keys direction = (+ direction) . sum
     . fmap keyChange $ keys
 
    where
-    keyChange GLFW.Key'Equal = delta
-    keyChange GLFW.Key'Minus = negate delta
+    keyChange GLFW.Key'Equal = angularVelocity * realToFrac deltaT
+    keyChange GLFW.Key'Minus = negate angularVelocity * realToFrac deltaT
     keyChange _              = 0
 
-    delta = 0.02
+    -- Radians per second
+    angularVelocity = 1
 
   updatePlayerPosition :: DeltaT -> HeldKeys -> PlayerPosition -> PlayerPosition
   updatePlayerPosition dT keys (x, z) =
@@ -239,6 +244,7 @@ game eInput = do
           }
       in ((x', y'), camera')
      where
+      -- TODO Move this somewhere easier to find
       cameraMouseSensitivity = 0.0015
 
       keyVelocity :: L.V3 a
