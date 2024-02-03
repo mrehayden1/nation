@@ -32,6 +32,8 @@ executable nation
       Matrix
       Pipeline
       Shaders
+      Text
+      Text.Font.MSDF
       Texture
       Util
       Vector
@@ -39,8 +41,10 @@ executable nation
   hs-source-dirs:
       src
   default-extensions:
+      DeriveGeneric
       FlexibleContexts
       LambdaCase
+      OverloadedStrings
       RankNTypes
       RecordWildCards
       RecursiveDo
@@ -51,8 +55,10 @@ executable nation
   build-depends:
       GLFW-b
     , JuicyPixels
+    , JuicyPixels-extra
     , OpenGL
     , StateVar
+    , aeson
     , base >=4.7 && <5
     , bytestring
     , containers
@@ -61,6 +67,7 @@ executable nation
     , filepath
     , lens
     , linear
+    , mtl
     , ref-tf
     , reflex
     , reflex-glfw-simple

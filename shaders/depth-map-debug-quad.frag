@@ -23,7 +23,7 @@ void main()
     //FragColor = vec4(vec3(depthValue), 1.0); // orthographic
     //FragColor = vec4(vec3(LinearizeDepth(depthValue) / far_plane), 1.0); // perspective
 
-    // Blue quad
+    // Uniform blue (for testing)
     //FragColor = vec4(0.0f, 0.0f, 1.0f, 1.0f);
 
     // Regular texture

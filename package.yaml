@@ -20,6 +20,7 @@ extra-source-files:
 description:         Nation the Game
 
 dependencies:
+- aeson
 - base >= 4.7 && < 5
 - bytestring
 - containers
@@ -28,8 +29,10 @@ dependencies:
 - filepath
 - GLFW-b
 - JuicyPixels
+- JuicyPixels-extra
 - lens
 - linear
+- mtl
 - OpenGL
 - ref-tf
 - reflex
@@ -50,8 +53,10 @@ ghc-options:
 - -Wredundant-constraints
 
 default-extensions:
+- DeriveGeneric
 - FlexibleContexts
 - LambdaCase
+- OverloadedStrings
 - RankNTypes
 - RecordWildCards
 - RecursiveDo

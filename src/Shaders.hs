@@ -1,5 +1,6 @@
 module Shaders (
   ShaderLocation,
+  GL.ShaderType(..),
 
   compileShaders
 ) where

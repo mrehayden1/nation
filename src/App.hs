@@ -1,16 +1,24 @@
 module App (
+  Env(..),
+
+  Frame,
+
+  Input(..),
   Time,
   DeltaT,
 
   Output(..),
-  Input(..),
   WorldState(..),
 
-  app
+  PlayerPosition,
+  PosX,
+  PosZ,
+
+  game
 ) where
 
 import Control.Monad
-import Control.Monad.Fix
+import Control.Monad.Reader
 import Data.List (delete, insert)
 import Data.Time.Clock
 import Data.Tuple.Extra
@@ -23,38 +31,51 @@ import Camera (Camera)
 import Cursor
 import qualified Camera as Cam
 
-type Time = NominalDiffTime
-type DeltaT = NominalDiffTime
-type HeldKeys = [GLFW.Key]
+data Env = Env {
+  consoleDebuggingEnabled :: Bool,
+  debugInfoEnabledDefault :: Bool,
+  windowHeight :: Int,
+  windowWidth :: Int,
+  -- TODO User savable settings
+  vsyncEnabled :: Bool
+}
+
+type Frame = (Input, Output)
 
 data Input = Input {
   cursorPos :: CursorPosition,
   keys :: [(GLFW.Key, GLFW.KeyState, GLFW.ModifierKeys)],
   time :: Time,
   deltaT :: DeltaT
-}
+} deriving (Show)
+
+type Time = NominalDiffTime
+type DeltaT = NominalDiffTime
+type HeldKeys = [GLFW.Key]
 
 data Output = Output {
   shouldExit :: Bool,
   shouldOverlayLightDepthQuad :: Bool,
+  shouldOverlayDebugInfo :: Bool,
   worldState :: WorldState
+}
+
+data WorldState = WorldState {
+  daylightAmbientIntensity :: Float,
+  daylightDirection :: L.V3 Float,
+  camera :: Camera Float,
+  playerPosition :: PlayerPosition
 }
 
 type PosX = Float
 type PosZ = Float
 type PlayerPosition = (PosX, PosZ)
 
-data WorldState = WorldState {
-  camera :: Camera Float,
-  daylightAmbientIntensity :: Float,
-  daylightDirection :: L.V3 Float
-}
-
 defaultCamera :: Floating a => Camera a
 defaultCamera = Cam.Camera {
   Cam.pitch = negate $ (3 * pi) / 8,
   Cam.position = L.V3 0 10 3,
-  Cam.yaw = negate (pi / 2)
+  Cam.yaw = negate $ pi / 2
 }
 
 -- World units per second
@@ -70,21 +91,29 @@ quitKey = GLFW.Key'Escape
 toggleDebugQuadKey :: GLFW.Key
 toggleDebugQuadKey = GLFW.Key'F2
 
+toggleDebugInfoKey :: GLFW.Key
+toggleDebugInfoKey = GLFW.Key'F3
+
 toggleDebugCameraKey :: GLFW.Key
 toggleDebugCameraKey = GLFW.Key'Backspace
 
-app :: forall t m. (Adjustable t m, MonadFix m, MonadHold t m)
-  => Event t Input
-  -> m (Dynamic t Output)
-app input = do
-  delta <- holdDyn 0 . fmap deltaT $ input
-  cursor <- holdDyn (0, 0) . fmap cursorPos $ input
-  let keyPresses = fmap (fmap fst3 . filter ((== GLFW.KeyState'Pressed) . snd3) . keys) input
-  heldKeys <- foldDyn (flip (foldl (flip $ uncurry3 updateHeldKeys)) . keys) [] input
+game :: forall t m. (Adjustable t m, MonadFix m, MonadHold t m,
+  MonadReader Env m)
+    => Event t Input
+    -> m (Dynamic t Frame)
+game eInput = do
+  Env {..} <- ask
+  delta <- holdDyn 0 . fmap deltaT $ eInput
+  cursor <- holdDyn (0, 0) . fmap cursorPos $ eInput
+  let keyPresses = fmap (fmap fst3 . filter ((== GLFW.KeyState'Pressed) . snd3) . keys) eInput
+  heldKeys <- foldDyn (flip (foldl (flip $ uncurry3 updateHeldKeys)) . keys) [] eInput
   shouldExit <- holdDyn False . fmap (const True) . ffilter (elem quitKey)
     $ keyPresses
   overlayQuad <- toggle False . ffilter (elem toggleDebugQuadKey) $ keyPresses
   debugCameraOn <- toggle False . ffilter (elem toggleDebugCameraKey)
+    $ keyPresses
+  debugInfoOn <- toggle debugInfoEnabledDefault
+    . ffilter (elem toggleDebugInfoKey)
     $ keyPresses
   playerPosition <- foldDyn (uncurry . flip $ updatePlayerPosition) (0, 0)
     . gate (fmap not . current $ debugCameraOn)
@@ -94,21 +123,28 @@ app input = do
   let camera = debugCameraOn >>= \d -> if d then debugCam else playerCamera
   ambientLight <- holdDyn 0
     . fmap ((* 0.1) . max 0 . sin . realToFrac . time)
-    $ input
+    $ eInput
   sunPitch <- foldDyn updateLightDirection (pi / 2) . updated $ heldKeys
   let sunDirection = fmap lightDirection sunPitch
       worldState = WorldState
-        <$> camera
-        <*> ambientLight
+        <$> ambientLight
         <*> sunDirection
+        <*> camera
+        <*> playerPosition
   {-
       sunDirection = lightDirection $ (3 * pi) / 4
       worldState = WorldState <$> camera <*> pure ambientLight <*> pure sunDirection
   -}
-  return $ Output
-    <$> shouldExit
-    <*> overlayQuad
-    <*> worldState
+  let output = Output
+        <$> shouldExit
+        <*> overlayQuad
+        <*> debugInfoOn
+        <*> worldState
+  -- Return the current input with the output.
+  -- We can use undefined for the initial value because output is never
+  -- produced until there has been an actual input.
+  input <- holdDyn undefined eInput
+  return $ (,) <$> input <*> output
  where 
   updateHeldKeys :: GLFW.Key -> GLFW.KeyState -> GLFW.ModifierKeys -> [GLFW.Key] -> [GLFW.Key]
   updateHeldKeys k GLFW.KeyState'Pressed  _ ks = insert k ks

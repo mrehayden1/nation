@@ -4,11 +4,12 @@ module Main (
 
 import Control.Exception
 import Control.Monad
-import Control.Monad.IO.Class
+import Control.Monad.Reader
 import Data.IORef
 import Data.Maybe
 import Data.StateVar
 import Data.Time.Clock.POSIX
+import Data.Tuple.Extra
 import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
@@ -19,27 +20,36 @@ import Reflex
 import Reflex.GLFW.Simple
 import Reflex.Host.Headless
 import Reflex.Network
+import Text.Printf
 
 import App
 import qualified Camera as Cam
 import Element
 import qualified Matrix as M
 import Pipeline
-import Texture
+import Text
 import Util (bufferOffset)
 import Vector
 
 appName :: String
 appName = "Nation"
 
--- TODO Add debugging build flag
-debugging :: Bool
-debugging = True
---debugging = False
+appEnv :: Env
+appEnv = Env {
+  -- TODO Add debugging build flag?
+  consoleDebuggingEnabled = True,
+  debugInfoEnabledDefault = True,
+  windowHeight = 1080,
+  windowWidth = 1920,
+--windowHeight = 768,
+--windowWidth = 1024,
+  vsyncEnabled = False
+}
 
-windowWidth, windowHeight :: Int
-windowWidth = 1920
-windowHeight = 1080
+type AspectRatio = Float
+
+windowAspectRatio :: Env -> AspectRatio
+windowAspectRatio Env {..} = realToFrac windowWidth / realToFrac windowHeight
 
 depthMapWidth, depthMapHeight, depthMapTextureImageLevel :: GL.GLsizei
 depthMapWidth = 2048
@@ -78,11 +88,10 @@ directionalLightProjection camera lightDirection =
 directionalLightViewMatrix :: (L.Epsilon a, Floating a) => L.V3 a -> L.M44 a
 directionalLightViewMatrix direction = L.lookAt (negate direction) (L.V3 0 0 0) Cam.up
 
-perspectiveProjection :: Floating a => L.M44 a
-perspectiveProjection = L.perspective (fov * pi / 180) aspectRatio near far
+perspectiveProjection :: Floating a => a -> L.M44 a
+perspectiveProjection aspectRatio = L.perspective (fov * pi / 180) aspectRatio near far
  where
   fov = 45
-  aspectRatio = realToFrac windowWidth / realToFrac windowHeight
   near = 0.1
   far = 100
 
@@ -90,20 +99,28 @@ main :: IO ()
 main = do
   putStrLn $ "Starting " ++ appName ++ "..."
   bracket initialise shutdown $ \win -> do
-    timeRef <- newIORef Nothing
+    -- Used to get the time the frame was last refreshed
+    timeRef <- newIORef 0
     -- Create graphics elements
     sceneElements <- createSceneElements
     -- Create a depth buffer object and depth map texture
     (shadowDepthMapTexture, renderShadowDepthMap) <- createShadowDepthMapper sceneElements
+    -- Create renderers
+    renderScene <- createSceneRenderer appEnv sceneElements shadowDepthMapTexture
     overlayDebugQuad <- createDebugQuadOverlayer shadowDepthMapTexture
-    renderScene <- createSceneRenderer sceneElements shadowDepthMapTexture
-    let renderFrame Output{..} = do
+    debugTextOverlayer <- createDebugTextOverlayer appEnv timeRef
+    let renderFrame frame@(_, Output{..}) = do
           renderShadowDepthMap worldState
-          when shouldOverlayLightDepthQuad overlayDebugQuad
           renderScene worldState
+          when shouldOverlayLightDepthQuad overlayDebugQuad
+          when shouldOverlayDebugInfo . debugTextOverlayer $ frame
           GLFW.swapBuffers win
     -- Enter game loop
     runHeadlessApp $ do
+      time <- liftIO getPOSIXTime
+      -- Write the start time to the time ref assuming that the post build
+      -- event will happen immediately afterwards
+      liftIO $ writeIORef timeRef time
       WindowReflexes {..} <- windowReflexes win
       -- Use the post build to create the first tick.
       ePostBuild <- getPostBuild
@@ -112,28 +129,28 @@ main = do
       -- when the next tick comes
       let keys = foldDyn (:) [] . fmap (\(k, _, s, m) -> (k, s, m))
       keys' <- networkHold (return $ pure []) $ keys key <$ eTick
-      let input = attachPromptlyDynWith uncurry (Input <$> cursorPos <*> join keys')
-                    . leftmost $ [(0, 0) <$ ePostBuild, eTick]
-      eOutput <- updated <$> app input
-      let eShouldExit = void . ffilter id . fmap shouldExit $ eOutput
+      let eInput = attachPromptlyDynWith uncurry (Input <$> cursorPos <*> join keys')
+                    . leftmost $ [(time, 0) <$ ePostBuild, eTick]
+      eFrame <- fmap updated . flip runReaderT appEnv . game $ eInput
+      let eShouldExit = void . ffilter id . fmap (shouldExit . snd) $ eFrame
           eShutdown = leftmost [eShouldExit, windowClose]
       performEvent_
-        . fmap (processFrame timeRef (liftIO . tickTrigger) (liftIO . renderFrame))
-        $ eOutput
+        . fmap (progressFrame timeRef (liftIO . tickTrigger) (liftIO . renderFrame))
+        $ eFrame
       return eShutdown
  where
-  processFrame :: MonadIO m
-    => IORef (Maybe POSIXTime)
+  progressFrame :: MonadIO m
+    => IORef POSIXTime
     -> ((Time, DeltaT) -> m ())
-    -> (Output -> m ())
-    -> Output
+    -> ((Input, Output) -> m ())
+    -> (Input, Output)
     -> m ()
-  processFrame timeRef tickTrigger render output = do
-    render output
+  progressFrame timeRef tickTrigger render frame = do
+    render frame
     time' <- liftIO getPOSIXTime
-    time <- liftIO . fmap (fromMaybe time') . readIORef $ timeRef
+    time <- liftIO . readIORef $ timeRef
     let delta = time' - time
-    liftIO . writeIORef timeRef . Just $ time'
+    liftIO . writeIORef timeRef $ time'
     -- Progress the simulation one tick after we're finished rendering.
     tickTrigger (time, delta)
     -- Collect events to process in the next tick.
@@ -141,25 +158,42 @@ main = do
 
 initialise :: IO GLFW.Window
 initialise = do
+  let Env {..} = appEnv
   r <- GLFW.init
   unless r (error "GLFW.init error.")
   GLFW.defaultWindowHints
-  when debugging $ do
-    putStrLn "Debugging enabled"
+  -- Stop window resizing
+  GLFW.windowHint (GLFW.WindowHint'Resizable False)
+  when consoleDebuggingEnabled $ do
+    putStrLn "Console debugging enabled"
     GLFW.windowHint (GLFW.WindowHint'OpenGLDebugContext True)
   _ <- GLFW.init
   window <- fmap (fromMaybe (error "GLFW failed to create window."))
     . GLFW.createWindow windowWidth windowHeight appName Nothing $ Nothing
   GLFW.makeContextCurrent (Just window)
   -- Enable console debugging output
-  when debugging $ do
+  when consoleDebuggingEnabled $ do
     GL.debugOutput $= GL.Enabled
     GL.debugOutputSynchronous $= GL.Enabled
     GL.debugMessageCallback $= Just printDebugMessage
+  -- MOUSE
   -- Hide cursor
   GLFW.setCursorInputMode window GLFW.CursorInputMode'Disabled
+  -- Capture raw mouse motion if supported
+  rawMouseSupported <- GLFW.rawMouseMotionSupported
+  if rawMouseSupported
+    then
+      GLFW.setRawMouseMotion window True
+    else
+      putStrLn "Raw mouse motion unsupported."
+  -- GRAPHICS
+  -- Vsync
+  GLFW.swapInterval $ if vsyncEnabled then 1 else 0
   -- Enable depth testing
   GL.depthFunc $= Just GL.Less
+  -- Enable blending
+  GL.blend $= GL.Enabled
+  GL.blendFunc $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
   return window
  where
   printDebugMessage :: GL.DebugMessage -> IO ()
@@ -191,7 +225,6 @@ createShadowDepthMapper sceneElements = do
   GL.framebufferTexture2D GL.Framebuffer GL.DepthAttachment GL.Texture2D depthMap depthMapTextureImageLevel
   GL.drawBuffer $= GL.NoBuffers -- Don't draw colour to our framebuffer
   GL.readBuffer $= GL.NoBuffers -- Don't read colour from our framebuffer
-  print =<< get (GL.framebufferStatus GL.Framebuffer)
   GL.bindFramebuffer GL.Framebuffer $= GL.defaultFramebufferObject -- unbind
   pipeline <- createPipeline [
       ("depth", GL.FragmentShader),
@@ -206,21 +239,17 @@ createShadowDepthMapper sceneElements = do
     -- Set projection matrix
     projection <- GL.newMatrix GL.RowMajor . M.unpack
       $ directionalLightProjection
-      
     let projectionUniform = pipelineUniform pipeline "projectionM"
     GL.uniform projectionUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set view matrix
     viewMatrix <- GL.newMatrix GL.RowMajor . M.unpack
       . directionalLightViewMatrix $ daylightDirection
-    
     let viewUniform = pipelineUniform pipeline "viewM"
     GL.uniform viewUniform $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
-
     -- Set model matrix
     model <- GL.newMatrix GL.RowMajor . M.unpack $ L.identity
     let modelUniform = pipelineUniform pipeline "modelM"
     GL.uniform modelUniform $= (model :: GL.GLmatrix GL.GLfloat)
-
     GL.viewport $= (
         GL.Position 0 0,
         GL.Size depthMapWidth depthMapHeight
@@ -230,8 +259,50 @@ createShadowDepthMapper sceneElements = do
     forM_ sceneElements renderElement
     GL.bindFramebuffer GL.Framebuffer $= GL.defaultFramebufferObject -- unbind
 
+createDebugTextOverlayer :: Env -> IORef POSIXTime -> IO (Frame -> IO ())
+createDebugTextOverlayer env timeRef = do
+  font <- loadFont "bpdots.squares-bold"
+  renderText <- createDebugTextRenderer . windowAspectRatio $ env
+  deltasRef <- newIORef []
+  fpsRef <- newIORef Nothing
+  return . renderDebugText deltasRef fpsRef font $ renderText
+ where
+  renderDebugText :: IORef [DeltaT]
+    -> IORef (Maybe (POSIXTime, Float))
+    -> MsdfFont
+    -> (Text -> IO ())
+    -> Frame
+    -> IO ()
+  renderDebugText deltasRef fpsRef font renderText (Input{..}, Output{..}) = do
+    let WorldState{..} = worldState
+    time' <- readIORef timeRef
+    modifyIORef deltasRef (deltaT :)
+    deltas <- readIORef deltasRef
+    modifyIORef fpsRef (maybe (Just (time', 0)) Just)
+    (lastUpdated, _) <- fmap fromJust . readIORef $ fpsRef
+    -- Update the fps count every half second
+    when (floor (time' * 2) > (floor (lastUpdated * 2) :: Int)) $ do
+      let deltasS = sum deltas
+          fps = if deltasS > 0
+                  then ((/) . realToFrac . length $ deltas)
+                         . realToFrac $ deltasS
+                  else 0
+      writeIORef fpsRef . Just $ (time', fps)
+      writeIORef deltasRef []
+    (_, fps) <- fmap fromJust . readIORef $ fpsRef
+    fpsText <- createDebugText font 0.02 (-0.975, -0.56) . (++ " FPS") . show
+      $ (round fps :: Int)
+    renderText fpsText
+    deleteText fpsText
+    positionText <- createDebugText font 0.02 (-0.975, -0.52)
+      . uncurry (printf "x: %s, y: 0, z: %s")
+      . both (printf "%.6f" :: PosX -> String)
+      $ playerPosition
+    renderText positionText
+    deleteText positionText
+
 createDebugQuadOverlayer :: GL.TextureObject -> IO (IO ())
-createDebugQuadOverlayer depthMapTexture = do
+createDebugQuadOverlayer texture = do
   -- Create and bind vertex array object before our vertex and element buffers
   vertexArrayObject <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vertexArrayObject
@@ -240,7 +311,7 @@ createDebugQuadOverlayer depthMapTexture = do
   GL.bindBuffer GL.ArrayBuffer $= Just vertexBuffer
   -- Load vertices into array buffer
   withArray vertices $ \ptr -> do
-    let size = fromIntegral $ length vertices * sizeOf (0.0 :: VertexUnit)
+    let size = fromIntegral $ length vertices * sizeOf (undefined :: VertexUnit)
     GL.bufferData GL.ArrayBuffer $= (size, ptr, GL.StaticDraw)
   -- Define vertex attribute pointers
   let positionAttributeLocation = GL.AttribLocation 0
@@ -257,8 +328,9 @@ createDebugQuadOverlayer depthMapTexture = do
   GL.vertexAttribPointer textureCoordinateAttributeLocation $=
     (GL.ToFloat, GL.VertexArrayDescriptor textureCoordinateAttributeWidth GL.Float (sizeOfVertexUnit * stride) . bufferOffset $ (sizeOfVertexUnit * positionAttributeWidth))
   GL.vertexAttribArray textureCoordinateAttributeLocation $= GL.Enabled
-  -- Unbind the vertex array object
+  -- Unbind the vertex array object and buffer object
   GL.bindVertexArrayObject $= Nothing
+  GL.bindBuffer GL.ArrayBuffer $= Nothing
   pipeline <- createPipeline [
       ("depth-map-debug-quad", GL.FragmentShader),
       ("depth-map-debug-quad", GL.VertexShader)
@@ -279,13 +351,14 @@ createDebugQuadOverlayer depthMapTexture = do
   overlayDebugQuad pipeline vertexArrayObject = do
     GL.currentProgram $= (Just . pipelineProgram $ pipeline)
     GL.activeTexture $= GL.TextureUnit 0
-    GL.textureBinding GL.Texture2D $= Just depthMapTexture
+    GL.textureBinding GL.Texture2D $= Just texture
     GL.bindVertexArrayObject $= Just vertexArrayObject
-    GL.drawArrays GL.TriangleStrip 0 . fromIntegral . length $ vertices
+    GL.drawArrays GL.TriangleStrip 0 . fromIntegral $ length vertices `div` 5
     GL.bindVertexArrayObject $= Nothing
+    GL.textureBinding GL.Texture2D $= Nothing
 
-createSceneRenderer :: [RenderableElement] -> GL.TextureObject -> IO (WorldState -> IO ())
-createSceneRenderer sceneElements shadowDepthMap = do
+createSceneRenderer :: Env -> [RenderableElement] -> GL.TextureObject -> IO (WorldState -> IO ())
+createSceneRenderer env@Env{..} sceneElements shadowDepthMap = do
   pipeline <- createPipeline [
       ("shader", GL.FragmentShader),
       ("shader", GL.VertexShader)
@@ -298,9 +371,8 @@ createSceneRenderer sceneElements shadowDepthMap = do
     GL.currentProgram $= (Just . pipelineProgram $ pipeline)
     -- Set projection matrix
     let projectionUniform = pipelineUniform pipeline "projectionM"
-    projection <- GL.newMatrix GL.RowMajor . M.unpack $ perspectiveProjection
-    -- Projection for directional light
-    --projection <- GL.newMatrix GL.RowMajor . M.unpack $ directionalLightProjection
+    projection <- GL.newMatrix GL.RowMajor . M.unpack . perspectiveProjection
+      . windowAspectRatio $ env
     GL.uniform projectionUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set view matrix
     let viewUniform = pipelineUniform pipeline "viewM"

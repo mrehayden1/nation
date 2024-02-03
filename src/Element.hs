@@ -4,6 +4,8 @@ module Element (
   VertexUnit,
   Vertices,
 
+  Index,
+
   createSceneElements,
   renderElement
 ) where
@@ -16,8 +18,9 @@ import Graphics.Rendering.OpenGL (($=))
 
 import Util (bufferOffset)
 
-type Index = GL.GLuint
 type VertexUnit = GL.GLfloat
+
+type Index = GL.GLuint
 
 {- Vertices are defiend as a tightly packed list of numbers with the following
  - layout for each vertex:
@@ -42,10 +45,10 @@ data ElementSpec =
  - respectively.
  - -}
 data RenderableElement =
-   RenderableVertices GL.PrimitiveMode GL.VertexArrayObject Int
- | RenderableIndexed GL.PrimitiveMode GL.VertexArrayObject Int
+   RenderableVertices GL.PrimitiveMode GL.VertexArrayObject GL.NumArrayIndices
+ | RenderableIndexed GL.PrimitiveMode GL.VertexArrayObject GL.NumArrayIndices
 
-stride :: Int
+stride :: Integral a => a
 stride = 6
 
 cube :: ElementSpec
@@ -138,21 +141,25 @@ createElement spec = do
       positionAttributeLocation = GL.AttribLocation 0
       normalAttributeLocation   = GL.AttribLocation 1
   GL.vertexAttribPointer positionAttributeLocation $=
-    (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Float (sizeOfVertexUnit * fromIntegral stride) nullPtr)
+    (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Float (sizeOfVertexUnit * stride) nullPtr)
   GL.vertexAttribArray positionAttributeLocation $= GL.Enabled
   GL.vertexAttribPointer normalAttributeLocation $=
-    (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Float (sizeOfVertexUnit * fromIntegral stride) . bufferOffset $ (sizeOfVertexUnit * 3))
+    (GL.ToFloat, GL.VertexArrayDescriptor 3 GL.Float (sizeOfVertexUnit * stride) . bufferOffset $ (sizeOfVertexUnit * 3))
   GL.vertexAttribArray normalAttributeLocation $= GL.Enabled
   -- Unbind the vertex array object
   GL.bindVertexArrayObject $= Nothing
   return $ case mIndices of
-    Just indices -> RenderableIndexed primitiveMode vertexArrayObject . length $ indices
-    Nothing      -> RenderableVertices primitiveMode vertexArrayObject $ length vertices `div` stride
+    Just indices -> RenderableIndexed primitiveMode vertexArrayObject
+                      . fromIntegral . length $ indices
+    Nothing      -> RenderableVertices primitiveMode vertexArrayObject
+                      . (`div` stride) . fromIntegral . length $ vertices
 
 renderElement :: RenderableElement -> IO ()
 renderElement (RenderableVertices primitveMode vertexArrayObject vertices) = do
   GL.bindVertexArrayObject $= Just vertexArrayObject
-  GL.drawArrays primitveMode 0 . fromIntegral $ vertices
+  GL.drawArrays primitveMode 0 vertices
+  GL.bindVertexArrayObject $= Nothing
 renderElement (RenderableIndexed primitiveMode vertexArrayObject indices) = do
   GL.bindVertexArrayObject $= Just vertexArrayObject
-  GL.drawElements primitiveMode (fromIntegral indices) GL.UnsignedInt nullPtr
+  GL.drawElements primitiveMode indices GL.UnsignedInt nullPtr
+  GL.bindVertexArrayObject $= Nothing
