@@ -190,7 +190,9 @@ initialise = do
   -- Vsync
   GLFW.swapInterval $ if vsyncEnabled then 1 else 0
   -- Enable depth testing
-  GL.depthFunc $= Just GL.Less
+  GL.depthFunc $= Just GL.Lequal
+  -- Set clear colour
+  GL.clearColor $= GL.Color4 0 0 0 1
   -- Enable blending
   GL.blend $= GL.Enabled
   GL.blendFunc $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
@@ -254,7 +256,6 @@ createShadowDepthMapper sceneElements = do
         GL.Position 0 0,
         GL.Size depthMapWidth depthMapHeight
       )
-    GL.clearColor $= GL.Color4 0 0 0 1
     GL.clear [GL.DepthBuffer]
     forM_ sceneElements renderElement
     GL.bindFramebuffer GL.Framebuffer $= GL.defaultFramebufferObject -- unbind
@@ -290,14 +291,16 @@ createDebugTextOverlayer env timeRef = do
       writeIORef fpsRef . Just $ (time', fps)
       writeIORef deltasRef []
     (_, fps) <- fmap fromJust . readIORef $ fpsRef
-    fpsText <- createDebugText font 0.02 (-0.975, -0.56) . (++ " FPS") . show
+    -- TODO Text position dependent on aspect ratio
+    fpsText <- createDebugText font 0.02 (-0.975, -0.54) . (++ " FPS") . show
       $ (round fps :: Int)
     renderText fpsText
     deleteText fpsText
     positionText <- createDebugText font 0.02 (-0.975, -0.52)
-      . uncurry (printf "x: %s, y: 0, z: %s")
-      . both (printf "%.6f" :: PosX -> String)
+      . uncurry (printf "x:%s, y: 0.0, z:%s")
+      . both (printf "% .6f" :: PosX -> String)
       $ playerPosition
+    GL.clear [GL.DepthBuffer]
     renderText positionText
     deleteText positionText
 
@@ -353,6 +356,7 @@ createDebugQuadOverlayer texture = do
     GL.activeTexture $= GL.TextureUnit 0
     GL.textureBinding GL.Texture2D $= Just texture
     GL.bindVertexArrayObject $= Just vertexArrayObject
+    GL.clear [GL.DepthBuffer]
     GL.drawArrays GL.TriangleStrip 0 . fromIntegral $ length vertices `div` 5
     GL.bindVertexArrayObject $= Nothing
     GL.textureBinding GL.Texture2D $= Nothing
@@ -402,6 +406,5 @@ createSceneRenderer env@Env{..} sceneElements shadowDepthMap = do
         GL.Position 0 0,
         GL.Size (fromIntegral windowWidth) (fromIntegral windowHeight)
       )
-    GL.clearColor $= GL.Color4 0 0 0 1
     GL.clear [GL.ColorBuffer, GL.DepthBuffer]
     forM_ sceneElements renderElement

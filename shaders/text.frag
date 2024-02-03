@@ -9,7 +9,7 @@ uniform vec4 foregroundColor;
 */
 
 vec4 foregroundColor = vec4(1.0, 1.0, 1.0, 1.0);
-vec4 backgroundColor = vec4(0.0, 0.0, 0.0, 0.0);
+vec4 transparent = vec4(0.0, 0.0, 0.0, 0.0);
 
 float median(float r, float g, float b) {
     return max(min(r, g), min(max(r, g), b));
@@ -24,5 +24,5 @@ void main() {
     float sd = median(msd.r, msd.g, msd.b);
     float screenPxDistance = screenPxRange()*(sd - 0.5);
     float opacity = clamp(screenPxDistance + 0.5, 0.0, 1.0);
-    FragColor = mix(backgroundColor, foregroundColor, opacity);
+    FragColor = mix(transparent, foregroundColor, opacity);
 }

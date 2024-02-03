@@ -32,19 +32,32 @@ data Text = Text {
   textVao :: GL.VertexArrayObject,
   textVbo :: GL.BufferObject,
   textEbo :: GL.BufferObject,
-  textEboIndices :: GL.NumArrayIndices -- convenience for draw commands
+  textNumIndices :: GL.NumArrayIndices, -- convenience for draw commands
+  textBackground :: TextBackground
+}
+
+data TextBackground = TextBackground {
+  textBgVao :: GL.VertexArrayObject,
+  textBgVbo :: GL.BufferObject,
+  textBgNumVertices :: GL.NumArrayIndices
 }
 
 -- Create a renderer that renders text in "debug text space" which has -1 and 1
 -- touching the left and right window edges respectively along the longest axis
 -- of the viewport (in practice this will be along the x-axis)
 createDebugTextRenderer :: Float -> IO (Text -> IO ())
-createDebugTextRenderer aspectRatio = do
-  pipeline <- createPipeline [
+createDebugTextRenderer viewportAspectRatio = do
+  textPipeline <- createPipeline [
       ("text", VertexShader),
       ("text", FragmentShader)
     ]
-  return $ renderText pipeline
+  backgroundPipeline <- createPipeline [
+      ("text-background", VertexShader),
+      ("text-background", FragmentShader)
+    ]
+  return $ \text -> do
+    renderBackground backgroundPipeline text
+    renderText textPipeline text
  where
   renderText :: Pipeline -> Text -> IO ()
   renderText pipeline Text{..} = do
@@ -60,17 +73,32 @@ createDebugTextRenderer aspectRatio = do
     -- Bind VAO
     GL.bindVertexArrayObject $= Just textVao
     -- Draw
-    GL.drawElements GL.Triangles textEboIndices GL.UnsignedInt nullPtr
+    GL.drawElements GL.Triangles textNumIndices GL.UnsignedInt nullPtr
     -- Unbind
     GL.bindVertexArrayObject $= Nothing
     GL.textureBinding GL.Texture2D $= Nothing
-    return ()
+
+  renderBackground :: Pipeline -> Text -> IO ()
+  renderBackground pipeline text = do
+    let TextBackground{..} = textBackground text
+    GL.currentProgram $= (Just . pipelineProgram $ pipeline)
+    -- Set projection matrix
+    let projectionUniform = pipelineUniform pipeline "projectionM"
+    projection' <- GL.newMatrix GL.RowMajor . M.unpack $ projection
+    GL.uniform projectionUniform $= (projection' :: GL.GLmatrix GL.GLfloat)
+    -- Bind VAO
+    GL.bindVertexArrayObject $= Just textBgVao
+    -- Draw
+    GL.drawArrays GL.Triangles 0 textBgNumVertices
+    -- Unbind
+    GL.bindVertexArrayObject $= Just textBgVao
+    GL.bindVertexArrayObject $= Nothing
 
   projection :: L.M44 Float
   projection =
-    if aspectRatio > 1
-      then let t = recip aspectRatio in L.ortho (-1) 1 (-t) t 1 (-1)
-      else let r = -aspectRatio      in L.ortho (-r) r (-1) 1 1 (-1)
+    if viewportAspectRatio > 1
+      then let t = recip viewportAspectRatio in L.ortho (-1) 1 (-t) t 1 (-1)
+      else let r = -viewportAspectRatio      in L.ortho (-r) r (-1) 1 1 (-1)
   
 
 -- createDebugText - positioned in "text space" with ems as the unit
@@ -82,9 +110,9 @@ createDebugText font@MsdfFont{..} scale origin str = do
   -- Create glyph quad vertices with the following layout
   -- Position  Texture co-ords
   -- x   y     x   y
-      quads = fst . foldl accum  ([], origin)
+      (quads, (cursorX, _)) = foldl accumGlyphQuads ([], origin)
         . mapMaybe (flip Map.lookup glyphMap . ord) $ str
-      indices = quadIndices . (`div` 4) . length $ quads
+      indices = glyphQuadIndices . (`div` 4) . length $ quads
   -- Create VAO
   vao <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vao
@@ -129,17 +157,19 @@ createDebugText font@MsdfFont{..} scale origin str = do
   GL.bindVertexArrayObject $= Nothing
   GL.bindBuffer GL.ArrayBuffer $= Nothing
   GL.bindBuffer GL.ElementArrayBuffer $= Nothing
+  textBackground <- createTextBackground scale origin cursorX
   return $ Text {
       textFont = font,
       textVao = vao,
       textVbo = vbo,
       textEbo = ebo,
-      textEboIndices = fromIntegral . length $ indices
+      textNumIndices = fromIntegral . length $ indices,
+      textBackground = textBackground
     }
  where
-  accum (vss, o) g =
-    let (vs, o') = glyphQuad (metrics meta) scale o g
-    in (vss ++ vs, o')
+  accumGlyphQuads (vss, cursor) g =
+    let (vs, cursor') = glyphQuad (metrics meta) scale cursor g
+    in (vss ++ vs, cursor')
 
   -- Create a quad for a glyph with the given horizontal offset and return the
   -- new offset for the cursor.
@@ -173,14 +203,64 @@ createDebugText font@MsdfFont{..} scale origin str = do
            [right / width', top    / height']
          ]
 
-  quadIndices :: Int -> [GL.ArrayIndex]
-  quadIndices n = concatMap (quadIndices' . (* 4)) [0..n-1]
+  glyphQuadIndices :: Int -> [GL.ArrayIndex]
+  glyphQuadIndices n = concatMap (quadIndices . (* 4)) [0..n-1]
    where
-    quadIndices' m = fmap ($ fromIntegral m) [id, (+1), (+2), (+1), (+2), (+3)]
+    quadIndices m = fmap ($ fromIntegral m) [id, (+1), (+2), (+1), (+2), (+3)]
+
+createTextBackground :: Scale
+  -> Origin
+  -> VertexUnit
+  -> IO TextBackground
+createTextBackground scale (x, y) x' = do
+  let quad = [
+          x , y ,
+          x', y ,
+          x , y',
+          x', y ,
+          x , y',
+          x', y'
+        ]
+      y' = y + scale
+      sizeOfVertexUnit = sizeOf (undefined :: VertexUnit) :: Int
+  -- Create VAO
+  vao <- GL.genObjectName
+  GL.bindVertexArrayObject $= Just vao
+  -- Create VBO
+  vbo <- GL.genObjectName
+  GL.bindBuffer GL.ArrayBuffer $= Just vbo
+  -- Load vertices into VBO
+  withArray quad $ \ptr -> do
+    let size = fromIntegral . (* sizeOfVertexUnit) . length $ quad
+    GL.bufferData GL.ArrayBuffer $= (size, ptr, GL.StaticDraw)
+  -- Create attribute pointers
+  let posAttrLoc = GL.AttribLocation 0
+      posAttrWidth = 2
+      stride = 2
+  GL.vertexAttribPointer posAttrLoc $=
+    (GL.ToFloat,
+     GL.VertexArrayDescriptor
+       posAttrWidth
+       GL.Float
+       (fromIntegral sizeOfVertexUnit * stride)
+       nullPtr
+     )
+  -- Unbind VAO and VBO
+  GL.vertexAttribArray posAttrLoc $= GL.Enabled
+  GL.bindVertexArrayObject $= Nothing
+  GL.bindBuffer GL.ArrayBuffer $= Nothing
+  return $ TextBackground {
+      textBgVao = vao,
+      textBgVbo = vbo,
+      textBgNumVertices = fromIntegral $ length quad
+    }
 
 deleteText :: Text -> IO ()
-deleteText Text {..} = do
+deleteText Text{..} = do
   GL.deleteObjectName textVbo
   GL.deleteObjectName textEbo
   GL.deleteObjectName textVao
+  let TextBackground{..} = textBackground
+  GL.deleteObjectName textBgVbo
+  GL.deleteObjectName textBgVao
   return ()
