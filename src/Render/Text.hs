@@ -1,4 +1,4 @@
-module Text (
+module Render.Text (
   Text,
   deleteText,
 
@@ -18,11 +18,11 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Linear as L
 import qualified Matrix as M
 
-import Element
-import Pipeline
-import Shaders
-import Text.Font.MSDF
-import Util
+import Render.Element
+import Render.Pipeline
+import Render.Shaders
+import Render.Text.Font.MSDF
+import Render.Util
 
 type Origin = (VertexUnit, VertexUnit)
 type Scale = Float

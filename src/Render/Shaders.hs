@@ -1,4 +1,4 @@
-module Shaders (
+module Render.Shaders (
   ShaderLocation,
   GL.ShaderType(..),
 

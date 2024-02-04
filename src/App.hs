@@ -1,5 +1,6 @@
 module App (
   Env(..),
+  windowAspectRatio,
 
   Frame,
 
@@ -39,6 +40,11 @@ data Env = Env {
   -- TODO User savable settings
   vsyncEnabled :: Bool
 }
+
+type AspectRatio = Float
+
+windowAspectRatio :: Env -> AspectRatio
+windowAspectRatio Env {..} = realToFrac windowWidth / realToFrac windowHeight
 
 type Frame = (Input, Output)
 

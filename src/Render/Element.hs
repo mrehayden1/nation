@@ -1,4 +1,4 @@
-module Element (
+module Render.Element (
   RenderableElement(..),
 
   VertexUnit,
@@ -16,7 +16,7 @@ import Foreign.Storable (sizeOf)
 import qualified Graphics.Rendering.OpenGL as GL
 import Graphics.Rendering.OpenGL (($=))
 
-import Util (bufferOffset)
+import Render.Util
 
 type VertexUnit = GL.GLfloat
 

@@ -1,4 +1,4 @@
-module Text.Font.MSDF (
+module Render.Text.Font.MSDF (
   MsdfFont(..),
   MsdfFontMeta(..),
   FontAtlasMeta(..),
@@ -22,7 +22,7 @@ import qualified Data.Vector as V
 import GHC.Generics
 import qualified Graphics.Rendering.OpenGL as GL
 
-import Texture
+import Render.Texture
 
 type TextureWidth = Int;
 type TextureHeight = Int;

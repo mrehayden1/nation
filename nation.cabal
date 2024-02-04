@@ -28,14 +28,17 @@ executable nation
       App
       Camera
       Cursor
-      Element
       Matrix
-      Pipeline
-      Shaders
-      Text
-      Text.Font.MSDF
-      Texture
-      Util
+      Render.Debug
+      Render.Element
+      Render.Pipeline
+      Render.Scene
+      Render.Shaders
+      Render.Shadow
+      Render.Text
+      Render.Text.Font.MSDF
+      Render.Texture
+      Render.Util
       Vector
       Paths_nation
   hs-source-dirs:

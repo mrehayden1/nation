@@ -1,4 +1,4 @@
-module Util (
+module Render.Util (
   bufferOffset
 ) where
 

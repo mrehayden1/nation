@@ -1,4 +1,4 @@
-module Texture (
+module Render.Texture (
   TextureWrapMode(..),
   GL.TextureFilter(..),
   loadTexture

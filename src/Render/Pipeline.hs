@@ -1,4 +1,4 @@
-module Pipeline (
+module Render.Pipeline (
   Pipeline (pipelineProgram),
 
   createPipeline,
@@ -12,7 +12,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import qualified Graphics.Rendering.OpenGL as GL
 
-import Shaders
+import Render.Shaders
 
 data Pipeline = Pipeline {
   pipelineProgram  :: GL.Program,
