@@ -9,7 +9,6 @@ import Data.IORef
 import Data.Maybe
 import Data.StateVar
 import Data.Time.Clock.POSIX
-import Data.Tuple.Extra
 import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
@@ -24,6 +23,7 @@ import Text.Printf
 
 import App
 import qualified Camera as Cam
+import Camera (Camera)
 import Element
 import qualified Matrix as M
 import Pipeline
@@ -291,18 +291,35 @@ createDebugTextOverlayer env timeRef = do
       writeIORef fpsRef . Just $ (time', fps)
       writeIORef deltasRef []
     (_, fps) <- fmap fromJust . readIORef $ fpsRef
-    -- TODO Text position dependent on aspect ratio
-    fpsText <- createDebugText font 0.02 (-0.975, 0.52) . (++ " FPS") . show
-      $ (round fps :: Int)
-    renderText fpsText
-    deleteText fpsText
-    positionText <- createDebugText font 0.02 (-0.975,  0.5)
-      . uncurry (printf "x:%s, y: 0.0, z:%s")
-      . both (printf "% .6f" :: PosX -> String)
-      $ playerPosition
-    GL.clear [GL.DepthBuffer]
-    renderText positionText
-    deleteText positionText
+    renderLines [
+        -- FPS counter
+        (++ " FPS") . show $ (round fps :: Int),
+        -- Player position
+        uncurry (printf "Player: x% .5f, y 0.00000, z% .5f") playerPosition,
+        -- Camera
+        cameraLine camera
+      ]
+   where
+    renderLines :: [String] -> IO ()
+    renderLines ls = do
+      -- Defined in "debug text space". See Text module.
+      let aspectRatio = windowAspectRatio env
+          screenTop = if aspectRatio > 1 then recip aspectRatio else 1
+          screenLeft = negate $ min aspectRatio 1
+          padding = 0.025
+          size = 0.02
+          left = screenLeft + padding
+          top line = screenTop - padding - line * size
+      GL.clear [GL.DepthBuffer]
+      forM_ (zip [1..] ls) $ \(n, l) -> do
+        t <- createDebugText font size (left, top n) l
+        renderText t
+        deleteText t
+
+    cameraLine :: PrintfArg a => Camera a -> String
+    cameraLine camera =
+      let L.V3 x y z = Cam.position camera
+      in printf "Camera: x% .5f, y% .5f, z% .5f" x y z
 
 createDebugQuadOverlayer :: GL.TextureObject -> IO (IO ())
 createDebugQuadOverlayer texture = do
