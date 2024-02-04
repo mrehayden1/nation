@@ -229,15 +229,16 @@ game eInput = do
           velocity = pure debugCameraSpeed * realToFrac deltaT
                        * (sum . map (keyVelocity direction Cam.up) $ keys)
           position = Cam.position camera + velocity
-          -- Negate the delta in pitch since a GLFW window uses an inverted
-          -- y-axis relative to OpenGL.
+          -- Note that a GLFW window uses an inverted y-axis relative to OpenGL
+          -- but it works out since our delta pitch and yaw match the change in
+          -- cursor position according to the window
           pitch = max (negate (pi / 2) + 0.1)
                     . min (pi / 2)
                     . (+ realToFrac (y - y') * cameraMouseSensitivity)
                     $ Cam.pitch camera
 
           yaw = Cam.yaw camera
-                  + realToFrac (x' - x) * cameraMouseSensitivity
+                  + realToFrac (x - x') * cameraMouseSensitivity
           camera' = camera {
             Cam.position = position,
             Cam.pitch    = pitch,

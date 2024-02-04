@@ -25,15 +25,16 @@ data Camera a = Camera {
 up :: Num a => L.V3 a
 up = L.V3 0 1 0
    
+-- Directional unit vector of the camera given pitch and yaw
 direction :: (Floating a, L.Epsilon a) => Camera a -> L.V3 a
 direction Camera{..} =
   let x = cos yaw * cos pitch
       y = sin pitch
-      z = sin yaw * cos pitch
+      z = negate $ sin yaw * cos pitch
   in L.normalize $ L.V3 x y z
 
 toViewMatrix :: (Floating a, L.Epsilon a) => Camera a -> L.M44 a
 toViewMatrix camera =
       -- the 'centre' to which the camera is looking
-  let centre    = position camera + direction camera
+  let centre = position camera + direction camera
   in L.lookAt (position camera) centre up
