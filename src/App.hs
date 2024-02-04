@@ -75,7 +75,7 @@ defaultCamera :: Floating a => Camera a
 defaultCamera = Cam.Camera {
   Cam.pitch = negate $ (3 * pi) / 8,
   Cam.position = L.V3 0 10 3,
-  Cam.yaw = negate $ pi / 2
+  Cam.yaw = pi / 2
 }
 
 playerStart :: Floating a => (a, a)
@@ -169,21 +169,22 @@ game eInput = do
     in L.normalize $ L.V3 lx ly lz
 
   updateLightDirection :: DeltaT -> HeldKeys -> Float -> Float
-  updateLightDirection deltaT keys direction = (+ direction) . sum
+  updateLightDirection dt keys direction = (+ direction) . sum
     . fmap keyChange $ keys
 
    where
-    keyChange GLFW.Key'Equal = angularVelocity * realToFrac deltaT
-    keyChange GLFW.Key'Minus = negate angularVelocity * realToFrac deltaT
+    keyChange GLFW.Key'Equal = angularVelocity * realToFrac dt
+    keyChange GLFW.Key'Minus = negate angularVelocity * realToFrac dt
     keyChange _              = 0
 
     -- Radians per second
     angularVelocity = 1
 
   updatePlayerPosition :: DeltaT -> HeldKeys -> PlayerPosition -> PlayerPosition
-  updatePlayerPosition dT keys (x, z) =
-    let (L.V3 x' _ z') = (playerSpeed *) . (realToFrac dT *) . sum . fmap keyVelocity $ keys
-    in (x + x', z + z')
+  updatePlayerPosition dt keys (x, z) =
+    let (L.V3 dx _ dz) = (playerSpeed *) . (realToFrac dt *) . sum
+                           . fmap keyVelocity $ keys
+    in (x + dx, z + dz)
    where
     keyVelocity :: Floating a => GLFW.Key -> L.V3 a
     keyVelocity GLFW.Key'W = L.V3   0   0 (-1)

@@ -281,7 +281,7 @@ createDebugTextOverlayer env timeRef = do
     deltas <- readIORef deltasRef
     modifyIORef fpsRef (maybe (Just (time', 0)) Just)
     (lastUpdated, _) <- fmap fromJust . readIORef $ fpsRef
-    -- Update the fps count every half second
+    -- Update the stored fps count every half second
     when (floor (time' * 2) > (floor (lastUpdated * 2) :: Int)) $ do
       let deltasS = sum deltas
           fps = if deltasS > 0
@@ -381,8 +381,6 @@ createSceneRenderer env@Env{..} sceneElements shadowDepthMap = do
     -- Set view matrix
     let viewUniform = pipelineUniform pipeline "viewM"
     viewMatrix <- GL.newMatrix GL.RowMajor . M.unpack .  Cam.toViewMatrix $ camera
-    -- View matrix for directional light
-    --viewMatrix <- GL.newMatrix GL.RowMajor . M.unpack $ L.lookAt (negate daylightDirection) (L.V3 0 0 0) Cam.up
     GL.uniform viewUniform $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set model matrix
     let modelUniform = pipelineUniform pipeline "modelM"

@@ -8,6 +8,14 @@ module Camera (
 
 import qualified Linear as L
 
+-- Conventions for our Camera angles
+--
+-- Our camera is defined as a postion, pitch and yaw in a right-handed
+-- euclidean 3D space, where yaw is the angle in radians of the direction
+-- vector of the camera projected onto the horizontal plane (y=0), measured
+-- anticlockwise from the +x axis, and pitch is similarly measured from the
+-- horizontal.
+
 data Camera a = Camera {
   pitch :: !a,
   position :: !(L.V3 a),
