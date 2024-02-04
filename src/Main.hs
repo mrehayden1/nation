@@ -291,14 +291,12 @@ createDebugTextOverlayer env timeRef = do
       writeIORef fpsRef . Just $ (time', fps)
       writeIORef deltasRef []
     (_, fps) <- fmap fromJust . readIORef $ fpsRef
-    renderLines [
+    renderLines $ [
         -- FPS counter
-        (++ " FPS") . show $ (round fps :: Int),
+        printf "Frame rate: %dfps" $ (round fps :: Int),
         -- Player position
-        uncurry (printf "Player: x% .5f, y 0.00000, z% .5f") playerPosition,
-        -- Camera
-        cameraLine camera
-      ]
+        uncurry (printf "Player: x% .5f y 0.00000 z% .5f") playerPosition
+      ] ++ cameraLines camera
    where
     renderLines :: [String] -> IO ()
     renderLines ls = do
@@ -316,10 +314,14 @@ createDebugTextOverlayer env timeRef = do
         renderText t
         deleteText t
 
-    cameraLine :: PrintfArg a => Camera a -> String
-    cameraLine camera =
+    cameraLines :: PrintfArg a => Camera a -> [String]
+    cameraLines camera =
       let L.V3 x y z = Cam.position camera
-      in printf "Camera: x% .5f, y% .5f, z% .5f" x y z
+      in [
+        printf "Camera: x% .5f y% .5f z% .5f" x y z,
+        printf "        pitch% .5f yaw% .5f" (Cam.pitch camera)
+          . Cam.yaw $ camera
+      ]
 
 createDebugQuadOverlayer :: GL.TextureObject -> IO (IO ())
 createDebugQuadOverlayer texture = do
