@@ -71,13 +71,6 @@ type PosX = Float
 type PosZ = Float
 type PlayerPosition = (PosX, PosZ)
 
-defaultCamera :: Floating a => Camera a
-defaultCamera = Cam.Camera {
-  Cam.pitch = negate $ (3 * pi) / 8,
-  Cam.position = L.V3 0 10 3,
-  Cam.yaw = pi / 2
-}
-
 playerStart :: Floating a => (a, a)
 playerStart = (0, 0)
 
@@ -157,8 +150,11 @@ game eInput = do
 
   playerPositionCamera :: Floating a => a -> a -> Camera a
   playerPositionCamera x z =
-    let position = Cam.position defaultCamera
-    in defaultCamera { Cam.position = position + L.V3 x 0 z }
+    Cam.Camera {
+      Cam.pitch = negate $ (3 * pi) / 8,
+        Cam.position = L.V3 x 10 (z + 3),
+        Cam.yaw = pi / 2
+    }
 
   lightDirection :: (L.Epsilon a, Floating a) => a -> L.V3 a
   lightDirection pitch = 
@@ -201,11 +197,10 @@ game eInput = do
     -> Dynamic t CursorPosition
     -> m (Dynamic t (Camera a))
   debugCamera delta playerCamera debugCameraOn heldKeys cursor = do
-    --debugCameraPosition defaultCamera False
-    -- Set the debug camera to the last player camera position every time its
-    -- toggled on.
+    -- Reset the debug camera to the last player camera position every time
+    -- its toggled on.
     let camOn = attachPromptlyDyn playerCamera . updated $ debugCameraOn
-    pos <- networkHold (return . pure $ defaultCamera)
+    pos <- networkHold (return playerCamera)
              . fmap (uncurry debugCameraPosition) $ camOn
     return . join $ pos
    where
