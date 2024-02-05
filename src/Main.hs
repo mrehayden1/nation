@@ -30,6 +30,7 @@ appEnv = Env {
   -- TODO Add debugging build flag?
   consoleDebuggingEnabled = True,
   debugInfoEnabledDefault = True,
+  multisampleSubsamples = Msaa4x,
   windowHeight = 1080,
   windowWidth = 1920,
 --windowHeight = 768,
@@ -110,6 +111,10 @@ initialise = do
     putStrLn "Console debugging enabled"
     GLFW.windowHint (GLFW.WindowHint'OpenGLDebugContext True)
   _ <- GLFW.init
+  -- Hint MSAA
+  unless (multisampleSubsamples == MsaaNone) $
+    GLFW.windowHint . GLFW.WindowHint'Samples . Just . round
+      . ((2 :: Float) ^^) . fromEnum $ multisampleSubsamples
   window <- fmap (fromMaybe (error "GLFW failed to create window."))
     . GLFW.createWindow windowWidth windowHeight appName Nothing $ Nothing
   GLFW.makeContextCurrent (Just window)
@@ -138,6 +143,8 @@ initialise = do
   -- Enable blending
   GL.blend $= GL.Enabled
   GL.blendFunc $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
+  -- Multisampling
+  unless (multisampleSubsamples == MsaaNone) $ GL.multisample $= GL.Enabled
   return window
  where
   printDebugMessage :: GL.DebugMessage -> IO ()

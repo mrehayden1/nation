@@ -1,5 +1,6 @@
 module App (
   Env(..),
+  MsaaSubsamples(..),
   windowAspectRatio,
 
   Frame,
@@ -32,7 +33,11 @@ import Camera (Camera)
 import Cursor
 import qualified Camera as Cam
 
+data MsaaSubsamples = MsaaNone | Msaa2x | Msaa4x | Msaa8x | Msaa16x
+  deriving (Eq, Enum)
+
 data Env = Env {
+  multisampleSubsamples :: MsaaSubsamples,
   consoleDebuggingEnabled :: Bool,
   debugInfoEnabledDefault :: Bool,
   windowHeight :: Int,
