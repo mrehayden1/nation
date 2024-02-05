@@ -116,8 +116,8 @@ createDebugQuadOverlayer texture = do
   GL.bindVertexArrayObject $= Nothing
   GL.bindBuffer GL.ArrayBuffer $= Nothing
   pipeline <- createPipeline [
-      ("depth-map-debug-quad", GL.FragmentShader),
-      ("depth-map-debug-quad", GL.VertexShader)
+      ("debug/depth-map-debug-quad", GL.FragmentShader),
+      ("debug/depth-map-debug-quad", GL.VertexShader)
     ]
   return $ overlayDebugQuad pipeline vertexArrayObject
  where
