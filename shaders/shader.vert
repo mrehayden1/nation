@@ -14,9 +14,9 @@ uniform mat4 projectionM;
 
 void main()
 {
-    // TODO pass the normal matrix in as a uniform
-    Normal = normalize(mat3(transpose(inverse(viewM * modelM))) * aNormal);
-    LightClipPosition = lightProjectionM * lightViewM * vec4(aPos, 1.0);
-    WorldPosition = vec3(viewM * modelM * vec4(aPos, 1.0));
-    gl_Position = projectionM * viewM * modelM * vec4(aPos, 1.0);
+  // TODO pass the normal matrix in as a uniform
+  Normal = normalize(mat3(transpose(inverse(viewM * modelM))) * aNormal);
+  LightClipPosition = lightProjectionM * lightViewM * vec4(aPos, 1.0);
+  WorldPosition = vec3(viewM * modelM * vec4(aPos, 1.0));
+  gl_Position = projectionM * viewM * modelM * vec4(aPos, 1.0);
 }
