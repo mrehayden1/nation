@@ -72,6 +72,7 @@ createDebugTextOverlayer env timeRef = do
           top line = screenTop - padding - line * size
       GL.clear [GL.DepthBuffer]
       forM_ (zip [1..] ls) $ \(n, l) -> do
+        -- TODO render the text as one draw call
         t <- createDebugText font size (left, top n) l
         renderText t
         deleteText t

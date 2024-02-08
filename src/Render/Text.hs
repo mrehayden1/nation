@@ -112,7 +112,8 @@ createDebugText font@MsdfFont{..} scale origin str = do
   -- x   y     x   y
       (quads, (cursorX, _)) = foldl accumGlyphQuads ([], origin)
         . mapMaybe (flip Map.lookup glyphMap . ord) $ str
-      indices = glyphQuadIndices . (`div` 4) . length $ quads
+      indices = glyphQuadIndices . (`div` (numVertexElements * 4))
+                  . length $ quads
   -- Create VAO
   vao <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vao
@@ -128,7 +129,7 @@ createDebugText font@MsdfFont{..} scale origin str = do
   GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
   withArray indices $ \ptr -> do
     let size = fromIntegral . (* sizeOf (undefined :: GL.ArrayIndex))
-                 . length $ quads
+                 . length $ indices
     GL.bufferData GL.ElementArrayBuffer $= (size, ptr, GL.StaticDraw)
   -- Define vertex attribute pointers
   let posAttrLoc = GL.AttribLocation 0
@@ -167,6 +168,8 @@ createDebugText font@MsdfFont{..} scale origin str = do
       textBackground = textBackground
     }
  where
+  numVertexElements = 4
+
   accumGlyphQuads (vss, cursor) g =
     let (vs, cursor') = glyphQuad (metrics meta) scale cursor g
     in (vss ++ vs, cursor')
@@ -203,10 +206,12 @@ createDebugText font@MsdfFont{..} scale origin str = do
            [right / width', top    / height']
          ]
 
+  -- Generate the indices for n glyphs
   glyphQuadIndices :: Int -> [GL.ArrayIndex]
-  glyphQuadIndices n = concatMap (quadIndices . (* 4)) [0..n-1]
+  glyphQuadIndices n = concatMap quadIndices [0..n-1]
    where
-    quadIndices m = fmap ($ fromIntegral m) [id, (+1), (+2), (+1), (+2), (+3)]
+    quadIndices m = fmap ($ fromIntegral m * 4)
+                         [id, (+1), (+2), (+1), (+2), (+3)]
 
 createTextBackground :: Scale
   -> Origin
@@ -221,6 +226,7 @@ createTextBackground scale (x, y) x' = do
           x , y',
           x', y'
         ]
+      numVertexElems = 2
       y' = y + scale
       sizeOfVertexUnit = sizeOf (undefined :: VertexUnit) :: Int
   -- Create VAO
@@ -252,7 +258,7 @@ createTextBackground scale (x, y) x' = do
   return $ TextBackground {
       textBgVao = vao,
       textBgVbo = vbo,
-      textBgNumVertices = fromIntegral $ length quad
+      textBgNumVertices = fromIntegral $ length quad `div` numVertexElems
     }
 
 deleteText :: Text -> IO ()
