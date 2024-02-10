@@ -1,18 +1,20 @@
-module Matrix (
+module Render.Matrix (
   perspectiveProjection,
 
   directionalLightProjection,
   directionalLightViewMatrix,
 
+  translate,
+  scale,
   rotateX,
   rotateY,
   rotateZ,
 
-  unpack
+  toGlMatrix
 ) where
 
 import Data.Foldable
-
+import qualified Graphics.Rendering.OpenGL as GL
 import qualified Linear as L
 import Linear (Epsilon(..), V3(..), V4(..), M44)
 
@@ -53,13 +55,25 @@ directionalLightViewMatrix :: (Epsilon a, Floating a)
 directionalLightViewMatrix direction =
   L.lookAt (negate direction) (V3 0 0 0)
 
-perspectiveProjection :: Floating a => a -> M44 a
-perspectiveProjection aspectRatio =
+perspectiveProjection :: Floating a => a -> a -> a -> a -> M44 a
+perspectiveProjection near far fov aspectRatio =
   L.perspective (fov * pi / 180) aspectRatio near far
- where
-  fov = 45
-  near = 0.1
-  far = 100
+
+scale :: Num a => a -> M44 a
+scale s =
+  V4
+    (V4 s 0 0 0)
+    (V4 0 s 0 0)
+    (V4 0 0 s 0)
+    (V4 0 0 0 1)
+
+translate :: Num a => a -> a -> a -> M44 a
+translate x y z =
+  V4
+    (V4 1 0 0 x)
+    (V4 0 1 0 y)
+    (V4 0 0 1 z)
+    (V4 0 0 0 1)
 
 rotateX :: Floating a => a -> M44 a
 rotateX t =
@@ -87,5 +101,11 @@ rotateZ t =
     (V4 0 0 0 1)
 
 -- unpack in row major order
-unpack :: M44 a -> [a]
+unpack :: (Foldable t1, Foldable t2) => t1 (t2 a) -> [a]
 unpack = concatMap toList . toList 
+
+-- unpacks nested vectors in row major order into a new GLmatrix
+toGlMatrix :: (GL.MatrixComponent a, Foldable t1, Foldable t2)
+  => t1 (t2 a)
+  -> IO (GL.GLmatrix a)
+toGlMatrix = GL.newMatrix GL.RowMajor . unpack

@@ -18,6 +18,7 @@ import Reflex.Network
 
 import App
 import Render.Debug
+-- TODO Refactor Elements into Model loaded from gltf
 import Render.Element
 import Render.Scene
 import Render.Shadow
@@ -51,12 +52,15 @@ main = do
     -- Create renderers
     renderScene <- createSceneRenderer appEnv sceneElements shadowDepthMapTexture
     overlayDebugQuad <- createDebugQuadOverlayer shadowDepthMapTexture
-    debugTextOverlayer <- createDebugTextOverlayer appEnv timeRef
+    overlayDebugText <- createDebugTextOverlayer appEnv timeRef
+    overlayGizmo <- createDebugGizmoOverlayer appEnv
     let renderFrame frame@(_, Output{..}) = do
           renderShadowDepthMap worldState
           renderScene worldState
           when shouldOverlayLightDepthQuad overlayDebugQuad
-          when shouldOverlayDebugInfo . debugTextOverlayer $ frame
+          when shouldOverlayDebugInfo $ do
+            overlayDebugText frame
+            overlayGizmo worldState
           GLFW.swapBuffers win
     -- Enter game loop
     runHeadlessApp $ do
@@ -78,7 +82,9 @@ main = do
       let eShouldExit = void . ffilter id . fmap (shouldExit . snd) $ eFrame
           eShutdown = leftmost [eShouldExit, windowClose]
       performEvent_
-        . fmap (progressFrame timeRef (liftIO . tickTrigger) (liftIO . renderFrame))
+        . fmap (progressFrame timeRef
+                              (liftIO . tickTrigger)
+                              (liftIO . renderFrame))
         $ eFrame
       return eShutdown
  where

@@ -1,8 +1,10 @@
 module Render.Debug (
+  createDebugGizmoOverlayer,
   createDebugTextOverlayer,
   createDebugQuadOverlayer
 ) where
 
+import Control.Lens
 import Control.Monad
 import Data.IORef
 import Data.Maybe
@@ -11,16 +13,49 @@ import Data.Time.Clock.POSIX
 import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
+import qualified Graphics.Rendering.OpenGL as GL
+import Linear ((!*!))
 import qualified Linear as L
 import Text.Printf
 
 import App
-import Camera as Cam
-import qualified Graphics.Rendering.OpenGL as GL
+import Camera (Camera)
+import qualified Camera as Cam
 import Render.Element
+import qualified Render.Matrix as M
+import Render.Model
 import Render.Pipeline
 import Render.Text
 import Render.Util
+
+createDebugGizmoOverlayer :: Env -> IO (WorldState -> IO ())
+createDebugGizmoOverlayer env = do
+  pipeline <- compilePipeline [
+      ("debug/gizmo", GL.FragmentShader),
+      ("debug/gizmo", GL.VertexShader)
+    ]
+  let modelMUniform = pipelineUniform pipeline "modelM"
+      viewMUniform = pipelineUniform pipeline "viewM"
+      projectionMUniform = pipelineUniform pipeline "projectionM"
+  -- Load gizmo
+  model <- fromGlbFile "assets/models/reference_frame.glb"
+  return $ \WorldState{..} -> do
+    bindPipeline pipeline
+    modelM <- M.toGlMatrix (L.identity :: L.M44 GL.GLfloat)
+    modelMUniform $= modelM
+    let cameraViewM = Cam.toViewMatrix camera :: L.M44 GL.GLfloat
+    -- Make the view matrix translation fixed so the gizmo is always in view.
+    viewM <- M.toGlMatrix . (M.translate 0 0 (-100) !*!)
+               . set L._w (L.V4 0 0 0 1) . L.m33_to_m44
+               $ cameraViewM ^. L._m33
+    viewMUniform $= viewM
+    projection <- M.toGlMatrix . M.perspectiveProjection 0.1 1000 45
+      . windowAspectRatio $ env
+    projectionMUniform $= (projection :: GL.GLmatrix GL.GLfloat)
+    GL.clear [GL.DepthBuffer]
+    renderModel model
+    unbindPipeline
+    return ()
 
 createDebugTextOverlayer :: Env -> IORef POSIXTime -> IO (Frame -> IO ())
 createDebugTextOverlayer env timeRef = do
@@ -116,7 +151,7 @@ createDebugQuadOverlayer texture = do
   -- Unbind the vertex array object and buffer object
   GL.bindVertexArrayObject $= Nothing
   GL.bindBuffer GL.ArrayBuffer $= Nothing
-  pipeline <- createPipeline [
+  pipeline <- compilePipeline [
       ("debug/depth-map-debug-quad", GL.FragmentShader),
       ("debug/depth-map-debug-quad", GL.VertexShader)
     ]
@@ -134,7 +169,7 @@ createDebugQuadOverlayer texture = do
 
   overlayDebugQuad :: Pipeline -> GL.VertexArrayObject -> IO ()
   overlayDebugQuad pipeline vertexArrayObject = do
-    GL.currentProgram $= (Just . pipelineProgram $ pipeline)
+    bindPipeline pipeline
     GL.activeTexture $= GL.TextureUnit 0
     GL.textureBinding GL.Texture2D $= Just texture
     GL.bindVertexArrayObject $= Just vertexArrayObject
@@ -142,5 +177,3 @@ createDebugQuadOverlayer texture = do
     GL.drawArrays GL.TriangleStrip 0 . fromIntegral $ length vertices `div` 5
     GL.bindVertexArrayObject $= Nothing
     GL.textureBinding GL.Texture2D $= Nothing
-
-

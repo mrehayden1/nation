@@ -11,8 +11,8 @@ import Linear as L
 import App
 import Camera as Cam
 import Render.Element
+import Render.Matrix as M
 import Render.Pipeline
-import Matrix as M
 
 depthMapWidth, depthMapHeight, depthMapTextureImageLevel :: GL.GLsizei
 depthMapWidth = 2048
@@ -39,7 +39,7 @@ createShadowDepthMapper sceneElements = do
   GL.drawBuffer $= GL.NoBuffers -- Don't draw colour to our framebuffer
   GL.readBuffer $= GL.NoBuffers -- Don't read colour from our framebuffer
   GL.bindFramebuffer GL.Framebuffer $= GL.defaultFramebufferObject -- unbind
-  pipeline <- createPipeline [
+  pipeline <- compilePipeline [
       ("depth", GL.FragmentShader),
       ("depth", GL.VertexShader)
     ]
@@ -47,22 +47,21 @@ createShadowDepthMapper sceneElements = do
  where
   renderDepthMap :: GL.FramebufferObject -> Pipeline -> WorldState -> IO ()
   renderDepthMap frameBuffer pipeline WorldState{..} = do
-    GL.currentProgram $= (Just . pipelineProgram $ pipeline)
+    bindPipeline pipeline
     GL.bindFramebuffer GL.Framebuffer $= frameBuffer
     -- Set projection matrix
-    projection <- GL.newMatrix GL.RowMajor . M.unpack
-      $ directionalLightProjection
+    projection <- M.toGlMatrix directionalLightProjection
     let projectionUniform = pipelineUniform pipeline "projectionM"
-    GL.uniform projectionUniform $= (projection :: GL.GLmatrix GL.GLfloat)
+    projectionUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set view matrix
-    viewMatrix <- GL.newMatrix GL.RowMajor . M.unpack
+    viewMatrix <- M.toGlMatrix
       . directionalLightViewMatrix daylightDirection $ Cam.up
     let viewUniform = pipelineUniform pipeline "viewM"
-    GL.uniform viewUniform $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
+    viewUniform $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set model matrix
-    model <- GL.newMatrix GL.RowMajor . M.unpack $ L.identity
+    model <- M.toGlMatrix (L.identity :: L.M44 GL.GLfloat)
     let modelUniform = pipelineUniform pipeline "modelM"
-    GL.uniform modelUniform $= (model :: GL.GLmatrix GL.GLfloat)
+    modelUniform $= (model :: GL.GLmatrix GL.GLfloat)
     GL.viewport $= (
         GL.Position 0 0,
         GL.Size depthMapWidth depthMapHeight

@@ -28,9 +28,10 @@ executable nation
       App
       Camera
       Cursor
-      Matrix
       Render.Debug
       Render.Element
+      Render.Matrix
+      Render.Model
       Render.Pipeline
       Render.Scene
       Render.Shaders
@@ -68,6 +69,7 @@ executable nation
     , dependent-sum
     , extra
     , filepath
+    , gltf-loader
     , lens
     , linear
     , mtl

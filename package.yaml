@@ -28,6 +28,7 @@ dependencies:
 - extra
 - filepath
 - GLFW-b
+- gltf-loader
 - JuicyPixels
 - JuicyPixels-extra
 - lens

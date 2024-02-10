@@ -10,13 +10,13 @@ import Linear as L
 import App
 import Camera as Cam
 import Render.Element
+import qualified Render.Matrix as M
 import Render.Pipeline
-import Matrix as M
 import Vector as V
 
 createSceneRenderer :: Env -> [RenderableElement] -> GL.TextureObject -> IO (WorldState -> IO ())
 createSceneRenderer env@Env{..} sceneElements shadowDepthMap = do
-  pipeline <- createPipeline [
+  pipeline <- compilePipeline [
       ("shader", GL.FragmentShader),
       ("shader", GL.VertexShader)
     ]
@@ -25,34 +25,35 @@ createSceneRenderer env@Env{..} sceneElements shadowDepthMap = do
   render :: Pipeline -> WorldState -> IO ()
   render pipeline WorldState{..} = do
     GL.textureBinding GL.Texture2D $= Just shadowDepthMap
-    GL.currentProgram $= (Just . pipelineProgram $ pipeline)
+    bindPipeline pipeline
     -- Set projection matrix
     let projectionUniform = pipelineUniform pipeline "projectionM"
-    projection <- GL.newMatrix GL.RowMajor . M.unpack . perspectiveProjection
+    projection <- M.toGlMatrix . M.perspectiveProjection 0.1 100 45
       . windowAspectRatio $ env
-    GL.uniform projectionUniform $= (projection :: GL.GLmatrix GL.GLfloat)
+    projectionUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set view matrix
     let viewUniform = pipelineUniform pipeline "viewM"
-    viewMatrix <- GL.newMatrix GL.RowMajor . M.unpack .  Cam.toViewMatrix $ camera
-    GL.uniform viewUniform $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
+    viewMatrix <- M.toGlMatrix .  Cam.toViewMatrix $ camera
+    viewUniform $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set model matrix
     let modelUniform = pipelineUniform pipeline "modelM"
-    model <- GL.newMatrix GL.RowMajor . M.unpack $ L.identity
-    GL.uniform modelUniform $= (model :: GL.GLmatrix GL.GLfloat)
+    model <- M.toGlMatrix (L.identity :: M44 GL.GLfloat)
+    modelUniform $= (model :: GL.GLmatrix GL.GLfloat)
     -- Set light projection matrix
     let lightProjectionUniform = pipelineUniform pipeline "lightProjectionM"
-    lightProjection <- GL.newMatrix GL.RowMajor . M.unpack $ directionalLightProjection
-    GL.uniform lightProjectionUniform $= (lightProjection :: GL.GLmatrix GL.GLfloat)
+    lightProjection <- M.toGlMatrix M.directionalLightProjection
+    lightProjectionUniform $= (lightProjection :: GL.GLmatrix GL.GLfloat)
     -- Set light view matrix
     let lightViewUniform = pipelineUniform pipeline "lightViewM"
-    lightView <- GL.newMatrix GL.RowMajor . M.unpack . directionalLightViewMatrix daylightDirection $ Cam.up
-    GL.uniform lightViewUniform $= (lightView :: GL.GLmatrix GL.GLfloat)
+    lightView <- M.toGlMatrix . M.directionalLightViewMatrix daylightDirection
+                   $ Cam.up
+    lightViewUniform $= (lightView :: GL.GLmatrix GL.GLfloat)
     -- Set ambient intensity
     let ambientIntensityUniform = pipelineUniform pipeline "ambientIntensity"
-    GL.uniform ambientIntensityUniform $= daylightAmbientIntensity
+    ambientIntensityUniform $= daylightAmbientIntensity
     -- Set light direction
     let lightDirectionUniform = pipelineUniform pipeline "lightDirection"
-    GL.uniform lightDirectionUniform $= V.toGlVector3 daylightDirection
+    lightDirectionUniform $= V.toGlVector3 daylightDirection
     GL.viewport $= (
         GL.Position 0 0,
         GL.Size (fromIntegral windowWidth) (fromIntegral windowHeight)

@@ -16,9 +16,9 @@ import qualified Data.IntMap.Strict as Map
 import Foreign
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Linear as L
-import qualified Matrix as M
 
 import Render.Element
+import qualified Render.Matrix as M
 import Render.Pipeline
 import Render.Shaders
 import Render.Text.Font.MSDF
@@ -47,11 +47,11 @@ data TextBackground = TextBackground {
 -- of the viewport (in practice this will be along the x-axis)
 createDebugTextRenderer :: Float -> IO (Text -> IO ())
 createDebugTextRenderer viewportAspectRatio = do
-  textPipeline <- createPipeline [
+  textPipeline <- compilePipeline [
       ("text", VertexShader),
       ("text", FragmentShader)
     ]
-  backgroundPipeline <- createPipeline [
+  backgroundPipeline <- compilePipeline [
       ("text-background", VertexShader),
       ("text-background", FragmentShader)
     ]
@@ -62,11 +62,11 @@ createDebugTextRenderer viewportAspectRatio = do
   renderText :: Pipeline -> Text -> IO ()
   renderText pipeline Text{..} = do
     let MsdfFont{..} = textFont
-    GL.currentProgram $= (Just . pipelineProgram $ pipeline)
+    bindPipeline pipeline
     -- Set projection matrix
     let projectionUniform = pipelineUniform pipeline "projectionM"
-    projection' <- GL.newMatrix GL.RowMajor . M.unpack $ projection
-    GL.uniform projectionUniform $= (projection' :: GL.GLmatrix GL.GLfloat)
+    projectionM <- M.toGlMatrix projection
+    projectionUniform $= (projectionM :: GL.GLmatrix GL.GLfloat)
     -- Bind Texture
     GL.activeTexture $= GL.TextureUnit 0
     GL.textureBinding GL.Texture2D $= Just texture
@@ -81,11 +81,12 @@ createDebugTextRenderer viewportAspectRatio = do
   renderBackground :: Pipeline -> Text -> IO ()
   renderBackground pipeline text = do
     let TextBackground{..} = textBackground text
-    GL.currentProgram $= (Just . pipelineProgram $ pipeline)
+    bindPipeline pipeline
     -- Set projection matrix
+    -- TODO don't create the projection every render
     let projectionUniform = pipelineUniform pipeline "projectionM"
-    projection' <- GL.newMatrix GL.RowMajor . M.unpack $ projection
-    GL.uniform projectionUniform $= (projection' :: GL.GLmatrix GL.GLfloat)
+    projectionM <- M.toGlMatrix projection
+    projectionUniform $= (projectionM :: GL.GLmatrix GL.GLfloat)
     -- Bind VAO
     GL.bindVertexArrayObject $= Just textBgVao
     -- Draw
