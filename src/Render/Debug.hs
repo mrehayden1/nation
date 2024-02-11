@@ -117,8 +117,8 @@ createDebugInfoOverlayer env timeRef = do
       let L.V3 x y z = camPos
       in [
         printf "Camera: x% .5f y% .5f z% .5f" x y z,
-        printf "        pitch% .5f yaw% .5f" (Cam.pitch camera)
-          . Cam.yaw $ camera
+        printf "        pitch% .1f yaw% .1f" (180 * camPitch / pi)
+          . (/ pi) . (* 180) $ camYaw
       ]
 
 createDebugQuadOverlayer :: GL.TextureObject -> IO (IO ())
