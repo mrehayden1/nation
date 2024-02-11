@@ -41,6 +41,7 @@ data Env = Env {
   multisampleSubsamples :: MsaaSubsamples,
   consoleDebuggingEnabled :: Bool,
   debugInfoEnabledDefault :: Bool,
+  fullscreen :: Bool,
   windowHeight :: Int,
   windowWidth :: Int,
   -- TODO User savable settings

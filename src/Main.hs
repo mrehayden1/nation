@@ -31,6 +31,7 @@ appEnv = Env {
   -- TODO Add debugging build flag?
   consoleDebuggingEnabled = True,
   debugInfoEnabledDefault = True,
+  fullscreen = False,
   multisampleSubsamples = Msaa4x,
   windowHeight = 1080,
   windowWidth = 1920,
@@ -121,8 +122,10 @@ initialise = do
   unless (multisampleSubsamples == MsaaNone) $
     GLFW.windowHint . GLFW.WindowHint'Samples . Just . round
       . ((2 :: Float) ^^) . fromEnum $ multisampleSubsamples
+  -- Create window
+  monitor' <- if fullscreen then GLFW.getPrimaryMonitor else return Nothing
   window <- fmap (fromMaybe (error "GLFW failed to create window."))
-    . GLFW.createWindow windowWidth windowHeight appName Nothing $ Nothing
+    . GLFW.createWindow windowWidth windowHeight appName monitor' $ Nothing
   GLFW.makeContextCurrent (Just window)
   -- Enable console debugging output
   when consoleDebuggingEnabled $ do
