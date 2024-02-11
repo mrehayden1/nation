@@ -21,6 +21,7 @@ module App (
 
 import Control.Monad
 import Control.Monad.Reader
+import Data.Fixed
 import Data.List (delete, insert)
 import Data.Time.Clock
 import Data.Tuple.Extra
@@ -29,7 +30,7 @@ import qualified Linear as L
 import Reflex
 import Reflex.Network
 
-import Camera (Camera)
+import Camera (Camera(..))
 import Cursor
 import qualified Camera as Cam
 
@@ -161,10 +162,10 @@ game eInput = do
 
   playerPositionCamera :: Floating a => a -> a -> Camera a
   playerPositionCamera x z =
-    Cam.Camera {
-      Cam.pitch = negate $ (3 * pi) / 8,
-        Cam.position = L.V3 x 10 (z + 3),
-        Cam.yaw = pi / 2
+    Camera {
+      camPitch = negate $ (3 * pi) / 8,
+        camPos = L.V3 x 10 (z + 3),
+        camYaw = pi / 2
     }
 
   lightDirection :: (L.Epsilon a, Floating a) => a -> L.V3 a
@@ -200,7 +201,7 @@ game eInput = do
     keyVelocity GLFW.Key'D = L.V3   1   0   0
     keyVelocity _          = L.V3   0   0   0
 
-  debugCamera :: forall a. (Floating a, L.Epsilon a, Ord a)
+  debugCamera :: forall a. (Floating a, Real a, L.Epsilon a)
     => Dynamic t DeltaT
     -> Dynamic t (Camera a)
     -> Dynamic t Bool
@@ -230,25 +231,22 @@ game eInput = do
       -> CursorPosition
       -> (CursorPosition, Camera a)
       -> (CursorPosition, Camera a)
-    updateDebugCamera deltaT keys (x', y') ((x, y), camera) =
+    updateDebugCamera deltaT keys (x', y') ((x, y), camera@Camera{..}) =
       let direction = Cam.direction camera
           velocity = pure debugCameraSpeed * realToFrac deltaT
-                       * (sum . map (keyVelocity direction Cam.up) $ keys)
-          position = Cam.position camera + velocity
-          -- Note that a GLFW window uses an inverted y-axis relative to OpenGL
-          -- but it works out since our delta pitch and yaw match the change in
-          -- cursor position according to the window
-          pitch = max (negate (pi / 2) + 0.1)
-                    . min (pi / 2)
+                       * (sum . map (keyVelocity direction Cam.worldUp) $ keys)
+          position = camPos + velocity
+          -- Delta pitch and yaw are the negation of the change in cursor
+          -- position according to the GLFW window.
+          pitch = max (-pi / 2) . min (pi / 2)
                     . (+ realToFrac (y - y') * cameraMouseSensitivity)
-                    $ Cam.pitch camera
-
-          yaw = Cam.yaw camera
-                  + realToFrac (x - x') * cameraMouseSensitivity
+                    $ camPitch
+          yaw = (`mod'` (2 * pi)) . (+ camYaw) . (* cameraMouseSensitivity)
+                  . realToFrac $ (x - x')
           camera' = camera {
-            Cam.position = position,
-            Cam.pitch    = pitch,
-            Cam.yaw      = yaw
+            camPos   = position,
+            camPitch = pitch,
+            camYaw   = yaw
           }
       in ((x', y'), camera')
      where

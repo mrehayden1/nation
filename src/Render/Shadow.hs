@@ -55,7 +55,7 @@ createShadowDepthMapper sceneElements = do
     projectionUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set view matrix
     viewMatrix <- M.toGlMatrix
-      . directionalLightViewMatrix daylightDirection $ Cam.up
+      . directionalLightViewMatrix daylightDirection $ Cam.worldUp
     let viewUniform = pipelineUniform pipeline "viewM"
     viewUniform $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set model matrix

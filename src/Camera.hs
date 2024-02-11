@@ -1,7 +1,8 @@
 module Camera (
   Camera (..),
 
-  up,
+  worldUp,
+
   direction,
   toViewMatrix
 ) where
@@ -16,25 +17,30 @@ import qualified Linear as L
 -- anticlockwise from the +x axis, and pitch is similarly measured from the
 -- horizontal.
 
+-- TODO Investigate storing the camera state as a matrix.
 data Camera a = Camera {
-  pitch :: !a,
-  position :: !(L.V3 a),
-  yaw :: !a
+  camPitch :: !a,
+  camPos :: !(L.V3 a),
+  camYaw :: !a
 } deriving (Show)
 
-up :: Num a => L.V3 a
-up = L.V3 0 1 0
-   
+-- World up unit vector
+worldUp :: Floating a => L.V3 a
+worldUp = L.V3 0 1 0
+
 -- Directional unit vector of the camera given pitch and yaw
 direction :: (Floating a, L.Epsilon a) => Camera a -> L.V3 a
 direction Camera{..} =
-  let x = cos yaw * cos pitch
-      y = sin pitch
-      z = negate $ sin yaw * cos pitch
+  let x = cos camYaw * cos camPitch
+      y = sin camPitch
+      z = negate $ sin camYaw * cos camPitch
   in L.normalize $ L.V3 x y z
 
 toViewMatrix :: (Floating a, L.Epsilon a) => Camera a -> L.M44 a
-toViewMatrix camera =
+toViewMatrix cam@Camera{..} =
+  let dir    = direction cam
       -- the 'centre' to which the camera is looking
-  let centre = position camera + direction camera
-  in L.lookAt (position camera) centre up
+      centre = camPos + dir
+      right = L.V3 (sin camYaw) 0 (cos camYaw)
+      up     = right `L.cross` dir -- camera's up
+  in L.lookAt camPos centre up

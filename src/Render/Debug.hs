@@ -19,7 +19,7 @@ import qualified Linear as L
 import Text.Printf
 
 import App
-import Camera (Camera)
+import Camera (Camera(..))
 import qualified Camera as Cam
 import Render.Element
 import qualified Render.Matrix as M
@@ -49,7 +49,7 @@ createDebugGizmoOverlayer env = do
                . set L._w (L.V4 0 0 0 1) . L.m33_to_m44
                $ cameraViewM ^. L._m33
     viewMUniform $= viewM
-    projection <- M.toGlMatrix . M.perspectiveProjection 0.1 1000 45
+    projection <- M.toGlMatrix . M.perspectiveProjection 0.1 1000
       . windowAspectRatio $ env
     projectionMUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     GL.clear [GL.DepthBuffer]

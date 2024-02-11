@@ -28,7 +28,7 @@ createSceneRenderer env@Env{..} sceneElements shadowDepthMap = do
     bindPipeline pipeline
     -- Set projection matrix
     let projectionUniform = pipelineUniform pipeline "projectionM"
-    projection <- M.toGlMatrix . M.perspectiveProjection 0.1 100 45
+    projection <- M.toGlMatrix . M.perspectiveProjection 0.1 100
       . windowAspectRatio $ env
     projectionUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set view matrix
@@ -46,7 +46,7 @@ createSceneRenderer env@Env{..} sceneElements shadowDepthMap = do
     -- Set light view matrix
     let lightViewUniform = pipelineUniform pipeline "lightViewM"
     lightView <- M.toGlMatrix . M.directionalLightViewMatrix daylightDirection
-                   $ Cam.up
+                   $ Cam.worldUp
     lightViewUniform $= (lightView :: GL.GLmatrix GL.GLfloat)
     -- Set ambient intensity
     let ambientIntensityUniform = pipelineUniform pipeline "ambientIntensity"

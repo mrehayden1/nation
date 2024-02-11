@@ -53,11 +53,13 @@ directionalLightViewMatrix :: (Epsilon a, Floating a)
   -> V3 a
   -> M44 a
 directionalLightViewMatrix direction =
+  -- TODO Shouldn't the centre be the centre of the camera view?
   L.lookAt (negate direction) (V3 0 0 0)
 
-perspectiveProjection :: Floating a => a -> a -> a -> a -> M44 a
-perspectiveProjection near far fov aspectRatio =
+perspectiveProjection :: Floating a => a -> a -> a -> M44 a
+perspectiveProjection near far aspectRatio =
   L.perspective (fov * pi / 180) aspectRatio near far
+ where fov = 45
 
 scale :: Num a => a -> M44 a
 scale s =
