@@ -1,6 +1,6 @@
 module Render.Debug (
   createDebugGizmoOverlayer,
-  createDebugTextOverlayer,
+  createDebugInfoOverlayer,
   createDebugQuadOverlayer
 ) where
 
@@ -57,8 +57,8 @@ createDebugGizmoOverlayer env = do
     unbindPipeline
     return ()
 
-createDebugTextOverlayer :: Env -> IORef POSIXTime -> IO (Frame -> IO ())
-createDebugTextOverlayer env timeRef = do
+createDebugInfoOverlayer :: Env -> IORef POSIXTime -> IO (Frame -> IO ())
+createDebugInfoOverlayer env timeRef = do
   font <- loadFont "bpdots.squares-bold"
   renderText <- createDebugTextRenderer . windowAspectRatio $ env
   deltasRef <- newIORef []
@@ -93,7 +93,7 @@ createDebugTextOverlayer env timeRef = do
         printf "Frame rate: %dfps" (round fps :: Int),
         -- Player position
         uncurry (printf "Player: x% .5f y 0.00000 z% .5f") playerPosition
-      ] ++ cameraLines camera
+      ] ++ cameraInfo camera
    where
     renderLines :: [String] -> IO ()
     renderLines ls = do
@@ -112,9 +112,9 @@ createDebugTextOverlayer env timeRef = do
         renderText t
         deleteText t
 
-    cameraLines :: PrintfArg a => Camera a -> [String]
-    cameraLines camera =
-      let L.V3 x y z = Cam.position camera
+    cameraInfo :: (Floating a, PrintfArg a) => Camera a -> [String]
+    cameraInfo Camera{..} =
+      let L.V3 x y z = camPos
       in [
         printf "Camera: x% .5f y% .5f z% .5f" x y z,
         printf "        pitch% .5f yaw% .5f" (Cam.pitch camera)

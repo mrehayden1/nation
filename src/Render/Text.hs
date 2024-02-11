@@ -180,6 +180,7 @@ createDebugText font@MsdfFont{..} scale origin str = do
   glyphQuad :: FontMetrics -> Scale -> Origin -> Glyph -> (Vertices, Origin)
   glyphQuad FontMetrics{..} s (x, y) Glyph{..} =
     let x' = x + s * advance
+    -- TODO Create a default quad for unknown glyphs
     in (maybe [] vertices bounds, (x', y))
    where
     vertices :: GlyphBounds -> [VertexUnit]

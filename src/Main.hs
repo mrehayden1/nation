@@ -52,14 +52,14 @@ main = do
     -- Create renderers
     renderScene <- createSceneRenderer appEnv sceneElements shadowDepthMapTexture
     overlayDebugQuad <- createDebugQuadOverlayer shadowDepthMapTexture
-    overlayDebugText <- createDebugTextOverlayer appEnv timeRef
+    overlayDebugInfo <- createDebugInfoOverlayer appEnv timeRef
     overlayGizmo <- createDebugGizmoOverlayer appEnv
     let renderFrame frame@(_, Output{..}) = do
           renderShadowDepthMap worldState
           renderScene worldState
           when shouldOverlayLightDepthQuad overlayDebugQuad
           when shouldOverlayDebugInfo $ do
-            overlayDebugText frame
+            overlayDebugInfo frame
             overlayGizmo worldState
           GLFW.swapBuffers win
     -- Enter game loop
