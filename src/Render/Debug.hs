@@ -7,6 +7,7 @@ module Render.Debug (
 import Control.Lens
 import Control.Monad
 import Data.IORef
+import qualified Data.List as List
 import Data.Maybe
 import Data.StateVar
 import Data.Time.Clock.POSIX
@@ -27,6 +28,12 @@ import Render.Model
 import Render.Pipeline
 import Render.Text
 import Render.Util
+
+data FpsStatistics = FpsStatistics {
+  fpsMean :: DeltaT,
+  fpsLow :: DeltaT,
+  fpsHigh :: DeltaT
+}
 
 createDebugGizmoOverlayer :: Env -> IO (WorldState -> IO ())
 createDebugGizmoOverlayer env = do
@@ -66,7 +73,7 @@ createDebugInfoOverlayer env timeRef = do
   return . renderDebugText deltasRef fpsRef font $ renderText
  where
   renderDebugText :: IORef [DeltaT]
-    -> IORef (Maybe (POSIXTime, Float))
+    -> IORef (Maybe (POSIXTime, FpsStatistics))
     -> MsdfFont
     -> (Text -> IO ())
     -> Frame
@@ -74,23 +81,33 @@ createDebugInfoOverlayer env timeRef = do
   renderDebugText deltasRef fpsRef font renderText (Input{..}, Output{..}) = do
     let WorldState{..} = worldState
     time' <- readIORef timeRef
-    modifyIORef deltasRef (deltaT :)
+    when (deltaT > 0) . modifyIORef deltasRef $ (deltaT :)
     deltas <- readIORef deltasRef
-    modifyIORef fpsRef (maybe (Just (time', 0)) Just)
+    modifyIORef fpsRef (maybe (Just (time', FpsStatistics 0 0 0)) Just)
     (lastUpdated, _) <- fmap fromJust . readIORef $ fpsRef
-    -- Update the stored fps count every half second
-    when (floor (time' * 2) > (floor (lastUpdated * 2) :: Int)) $ do
-      let deltasS = sum deltas
-          fps = if deltasS > 0
-                  then ((/) . realToFrac . length $ deltas)
-                         . realToFrac $ deltasS
-                  else 0
-      writeIORef fpsRef . Just $ (time', fps)
+    -- Update the stored fps count every half second only if there are deltas
+    when ((not . null $ deltas) && floor (time' * 2) > (floor (lastUpdated * 2) :: Int)) $ do
+      let fpss = fmap recip deltas
+          n = length fpss
+          fpsSum = sum fpss
+          fpss' = List.sort fpss
+          mean = if fpsSum > 0
+                   then fpsSum / realToFrac n
+                   else 0
+          stats = FpsStatistics {
+                    fpsMean = mean,
+                    fpsLow = head fpss',
+                    fpsHigh = fpss' !! (n - 1)
+                  }
+      writeIORef fpsRef . Just $ (time', stats)
       writeIORef deltasRef []
-    (_, fps) <- fmap fromJust . readIORef $ fpsRef
+    (_, fpsStats) <- fmap fromJust . readIORef $ fpsRef
     renderLines $ [
         -- FPS counter
-        printf "Frame rate: %dfps" (round fps :: Int),
+        printf "Frame rate",
+        printf "  mean  : %    dfps" (round . fpsMean $ fpsStats :: Int),
+        printf "  low   : %    dfps" (round . fpsLow $ fpsStats :: Int),
+        printf "  high  : %    dfps" (round . fpsHigh $ fpsStats :: Int),
         -- Player position
         uncurry (printf "Player: x% .5f y 0.00000 z% .5f") playerPosition
       ] ++ cameraInfo camera
