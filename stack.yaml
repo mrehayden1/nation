@@ -42,11 +42,12 @@ packages:
 extra-deps:
 - commutative-semigroups-0.1.0.1
 - gltf-codec-0.1.0.4
-- gltf-loader-0.3.0.0
 - patch-0.0.8.2
 - reflex-0.9.2.0
 - git: git@github.com:vagarenko/reflex-glfw-simple.git
   commit: 64bafffabaf83e0cd2045a8da5ecd8bdef401cee
+#- gltf-loader-0.3.0.0
+- ../haskell-gltf-loader
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

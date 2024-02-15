@@ -110,7 +110,7 @@ plane =
   in IndexedElement GL.Triangles vertices indices
 
 createSceneElements :: IO [RenderableElement]
-createSceneElements = mapM createElement [cube, plane]
+createSceneElements = mapM createElement [plane]
 
 createElement :: ElementSpec -> IO RenderableElement
 createElement spec = do

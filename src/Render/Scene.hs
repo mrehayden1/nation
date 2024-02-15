@@ -2,20 +2,19 @@ module Render.Scene (
   createSceneRenderer
 ) where
 
-import Control.Monad
 import Data.StateVar
 import qualified Graphics.Rendering.OpenGL as GL
 import Linear as L
 
 import App
 import Camera as Cam
-import Render.Element
+import Render.Model
 import qualified Render.Matrix as M
 import Render.Pipeline
 import Vector as V
 
-createSceneRenderer :: Env -> [RenderableElement] -> GL.TextureObject -> IO (WorldState -> IO ())
-createSceneRenderer env@Env{..} sceneElements shadowDepthMap = do
+createSceneRenderer :: Env -> [Model] -> GL.TextureObject -> IO (WorldState -> IO ())
+createSceneRenderer env@Env{..} scene shadowDepthMap = do
   pipeline <- compilePipeline [
       ("shader", GL.FragmentShader),
       ("shader", GL.VertexShader)
@@ -59,4 +58,4 @@ createSceneRenderer env@Env{..} sceneElements shadowDepthMap = do
         GL.Size (fromIntegral windowWidth) (fromIntegral windowHeight)
       )
     GL.clear [GL.ColorBuffer, GL.DepthBuffer]
-    forM_ sceneElements renderElement
+    mapM_ (renderModel pipeline) scene

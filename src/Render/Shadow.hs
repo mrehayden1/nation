@@ -2,7 +2,6 @@ module Render.Shadow (
   createShadowDepthMapper
 ) where
 
-import Control.Monad
 import Data.StateVar
 import Foreign.Ptr
 import qualified Graphics.Rendering.OpenGL as GL
@@ -10,8 +9,8 @@ import Linear as L
 
 import App
 import Camera as Cam
-import Render.Element
 import Render.Matrix as M
+import Render.Model
 import Render.Pipeline
 
 depthMapWidth, depthMapHeight, depthMapTextureImageLevel :: GL.GLsizei
@@ -21,8 +20,9 @@ depthMapTextureImageLevel = 0
 
 -- Create a texture object and a callback that renders the shadow depth map
 -- from the perspective of out light source to the texture.
-createShadowDepthMapper :: [RenderableElement] -> IO (GL.TextureObject, WorldState -> IO ())
-createShadowDepthMapper sceneElements = do
+createShadowDepthMapper :: [Model]
+  -> IO (GL.TextureObject, WorldState -> IO ())
+createShadowDepthMapper scene = do
   frameBuffer <- GL.genObjectName
   depthMap <- GL.genObjectName
   GL.textureBinding GL.Texture2D $= Just depthMap
@@ -67,7 +67,7 @@ createShadowDepthMapper sceneElements = do
         GL.Size depthMapWidth depthMapHeight
       )
     GL.clear [GL.DepthBuffer]
-    forM_ sceneElements renderElement
+    mapM_ (renderModel pipeline) scene
     GL.bindFramebuffer GL.Framebuffer $= GL.defaultFramebufferObject -- unbind
 
 

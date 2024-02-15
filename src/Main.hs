@@ -18,8 +18,7 @@ import Reflex.Network
 
 import App
 import Render.Debug
--- TODO Refactor Elements into Model loaded from gltf
-import Render.Element
+import Render.Model
 import Render.Scene
 import Render.Shadow
 
@@ -47,11 +46,12 @@ main = do
     -- Used to get the time the frame was last refreshed
     timeRef <- newIORef 0
     -- Create graphics elements
-    sceneElements <- createSceneElements
+    monument <- fromGlbFile "assets/models/monument.glb"
+    let scene = [monument]
     -- Create a depth buffer object and depth map texture
-    (shadowDepthMapTexture, renderShadowDepthMap) <- createShadowDepthMapper sceneElements
+    (shadowDepthMapTexture, renderShadowDepthMap) <- createShadowDepthMapper scene
     -- Create renderers
-    renderScene <- createSceneRenderer appEnv sceneElements shadowDepthMapTexture
+    renderScene <- createSceneRenderer appEnv scene shadowDepthMapTexture
     overlayDebugQuad <- createDebugQuadOverlayer shadowDepthMapTexture
     overlayDebugInfo <- createDebugInfoOverlayer appEnv timeRef
     overlayGizmo <- createDebugGizmoOverlayer appEnv

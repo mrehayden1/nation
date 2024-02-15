@@ -19,13 +19,6 @@ packages:
   original:
     hackage: gltf-codec-0.1.0.4
 - completed:
-    hackage: gltf-loader-0.3.0.0@sha256:e1ebcadd308fa53fadfa284ad8e374cba96d44ed0939f52708534f8ae4feb6f7,5837
-    pantry-tree:
-      sha256: 556fefe2e71c1c8d4927ec467ad86f7308f8e8b377f43ed4c328ab5f2de37daf
-      size: 1863
-  original:
-    hackage: gltf-loader-0.3.0.0
-- completed:
     hackage: patch-0.0.8.2@sha256:629479fb09e451570d4f7b2f581c37b16cb5ff131881f632138a199d8dcfe794,3338
     pantry-tree:
       sha256: f39897e2021c8207dc02341d54c8ea2720a0ae98a1e8e6f82a8d894f4e2cb959

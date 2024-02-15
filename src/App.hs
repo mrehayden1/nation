@@ -130,9 +130,7 @@ game eInput = do
   let playerCamera = fmap (uncurry playerPositionCamera) playerPosition
   debugCam <- debugCamera delta playerCamera debugCameraOn heldKeys cursor
   let camera = debugCameraOn >>= \d -> if d then debugCam else playerCamera
-  ambientLight <- holdDyn 0
-    . fmap ((* 0.1) . max 0 . sin . realToFrac . time)
-    $ eInput
+      ambientLight = pure 0.1
   sunPitch <- foldDyn (uncurry updateLightDirection) (pi / 2) . updated
     $ (,) <$> delta <*> heldKeys
   let sunDirection = fmap lightDirection sunPitch
