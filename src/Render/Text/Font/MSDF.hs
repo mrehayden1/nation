@@ -129,5 +129,6 @@ loadFont fontName = do
   let fontMeta = fromMaybe (error $ "Failed to parse font " ++ fontName)
         . decode $ content
       texturePath = fontPath ++ ".png"
-  texture <- loadTexture texturePath (Linear', Nothing) Linear' ClampToEdge
+  texture <- readTexture False (Linear', Nothing) Linear' ClampToEdge
+               ClampToEdge texturePath
   return $ MsdfFont fontMeta texture

@@ -23,17 +23,28 @@ depthMapTextureImageLevel = 0
 createShadowDepthMapper :: [Model]
   -> IO (GL.TextureObject, WorldState -> IO ())
 createShadowDepthMapper scene = do
-  frameBuffer <- GL.genObjectName
   depthMap <- GL.genObjectName
+  GL.activeTexture $= GL.TextureUnit 0
   GL.textureBinding GL.Texture2D $= Just depthMap
-  GL.texImage2D GL.Texture2D GL.NoProxy depthMapTextureImageLevel GL.DepthComponent' (GL.TextureSize2D depthMapWidth depthMapHeight) 0 (GL.PixelData GL.DepthComponent GL.Float nullPtr)
+  GL.texImage2D
+    GL.Texture2D
+    GL.NoProxy
+    depthMapTextureImageLevel
+    GL.DepthComponent'
+    (GL.TextureSize2D depthMapWidth depthMapHeight)
+    0
+    (GL.PixelData GL.DepthComponent GL.Float nullPtr)
+  -- Disable texture filtering on our depth map
   GL.textureFilter GL.Texture2D $= ((GL.Nearest, Nothing), GL.Nearest)
   -- Clamp to a max depth border so shadows don't appear when sampling
   -- outside of the depth map
   GL.textureBorderColor GL.Texture2D $= GL.Color4 1 1 1 1
   GL.textureWrapMode GL.Texture2D GL.S $= (GL.Repeated, GL.ClampToBorder)
   GL.textureWrapMode GL.Texture2D GL.T $= (GL.Repeated, GL.ClampToBorder)
-  -- Bind the depth map to the frame depth buffer
+  -- Unbind the texture
+  GL.textureBinding GL.Texture2D $= Nothing
+  -- Bind the depth map to the depth buffer FBO
+  frameBuffer <- GL.genObjectName
   GL.bindFramebuffer GL.Framebuffer $= frameBuffer
   GL.framebufferTexture2D GL.Framebuffer GL.DepthAttachment GL.Texture2D depthMap depthMapTextureImageLevel
   GL.drawBuffer $= GL.NoBuffers -- Don't draw colour to our framebuffer
@@ -67,7 +78,17 @@ createShadowDepthMapper scene = do
         GL.Size depthMapWidth depthMapHeight
       )
     GL.clear [GL.DepthBuffer]
-    mapM_ (renderModel pipeline) scene
+    mapM_ (traverseModel_ (renderMeshPrimitive pipeline)) scene
     GL.bindFramebuffer GL.Framebuffer $= GL.defaultFramebufferObject -- unbind
 
-
+  renderMeshPrimitive :: Pipeline -> M44 Float -> MeshPrimitive -> IO ()
+  renderMeshPrimitive pipeline modelMatrix' MeshPrimitive{..} = do
+    -- Set model matrix
+    modelMatrix <- M.toGlMatrix modelMatrix'
+    let modelMatrixUniform = pipelineUniform pipeline "modelM"
+    modelMatrixUniform $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
+    -- Draw
+    GL.bindVertexArrayObject $= Just meshPrimVao
+    GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedShort
+      nullPtr
+    GL.bindVertexArrayObject $= Nothing

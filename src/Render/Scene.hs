@@ -2,9 +2,12 @@ module Render.Scene (
   createSceneRenderer
 ) where
 
+import Control.Lens
 import Data.StateVar
+import Foreign
+import Linear (M44)
+import qualified Linear as L
 import qualified Graphics.Rendering.OpenGL as GL
-import Linear as L
 
 import App
 import Camera as Cam
@@ -12,6 +15,10 @@ import Render.Model
 import qualified Render.Matrix as M
 import Render.Pipeline
 import Vector as V
+
+shadowMapTextureUnit, albedoTextureUnit :: Integral a => a
+shadowMapTextureUnit = 0
+albedoTextureUnit = 1
 
 createSceneRenderer :: Env -> [Model] -> GL.TextureObject -> IO (WorldState -> IO ())
 createSceneRenderer env@Env{..} scene shadowDepthMap = do
@@ -23,21 +30,19 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
  where
   render :: Pipeline -> WorldState -> IO ()
   render pipeline WorldState{..} = do
-    GL.textureBinding GL.Texture2D $= Just shadowDepthMap
     bindPipeline pipeline
+    -- Bind the shadow map texture
+    GL.activeTexture $= GL.TextureUnit shadowMapTextureUnit
+    GL.textureBinding GL.Texture2D $= Just shadowDepthMap
+    -- Set view matrix
+    let viewUniform = pipelineUniform pipeline "viewM"
+    viewMatrix <- M.toGlMatrix .  Cam.toViewMatrix $ camera
+    viewUniform $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set projection matrix
     let projectionUniform = pipelineUniform pipeline "projectionM"
     projection <- M.toGlMatrix . M.perspectiveProjection 0.1 100
       . windowAspectRatio $ env
     projectionUniform $= (projection :: GL.GLmatrix GL.GLfloat)
-    -- Set view matrix
-    let viewUniform = pipelineUniform pipeline "viewM"
-    viewMatrix <- M.toGlMatrix .  Cam.toViewMatrix $ camera
-    viewUniform $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
-    -- Set model matrix
-    let modelUniform = pipelineUniform pipeline "modelM"
-    model <- M.toGlMatrix (L.identity :: M44 GL.GLfloat)
-    modelUniform $= (model :: GL.GLmatrix GL.GLfloat)
     -- Set light projection matrix
     let lightProjectionUniform = pipelineUniform pipeline "lightProjectionM"
     lightProjection <- M.toGlMatrix M.directionalLightProjection
@@ -53,9 +58,43 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     -- Set light direction
     let lightDirectionUniform = pipelineUniform pipeline "lightDirection"
     lightDirectionUniform $= V.toGlVector3 daylightDirection
+    -- Render
     GL.viewport $= (
         GL.Position 0 0,
         GL.Size (fromIntegral windowWidth) (fromIntegral windowHeight)
       )
     GL.clear [GL.ColorBuffer, GL.DepthBuffer]
-    mapM_ (renderModel pipeline) scene
+    mapM_ (traverseModel_ (renderMeshPrimitive pipeline)) scene
+    -- Unbind textures
+    GL.activeTexture $= GL.TextureUnit shadowMapTextureUnit
+    GL.textureBinding GL.Texture2D $= Nothing
+
+  renderMeshPrimitive :: Pipeline -> M44 Float -> MeshPrimitive -> IO ()
+  renderMeshPrimitive pipeline modelMatrix MeshPrimitive{..} = do
+    -- Set model matrix
+    modelMatrix' <- M.toGlMatrix modelMatrix
+    let modelMatrixUniform = pipelineUniform pipeline "modelM"
+    modelMatrixUniform $= (modelMatrix' :: GL.GLmatrix GL.GLfloat)
+    -- Set normal matrix
+    let normalMatrixUniform = pipelineUniform pipeline "normalM"
+    let transposeInverseModelMatrix = (^. L._m33) . L.transpose . L.inv44
+          $ modelMatrix
+    {-
+    normalMatrix <- M.toGlMatrix . L.m33_to_m44
+      . (transposeInverseModelMatrix L.!!/)
+      . L.det33 $ transposeInverseModelMatrix
+    -}
+    normalMatrix <- M.toGlMatrix . L.m33_to_m44 $ transposeInverseModelMatrix
+    normalMatrixUniform $= (normalMatrix :: GL.GLmatrix GL.GLfloat)
+    -- Set textures
+    let mTexture = materialBaseColorTexture =<< meshPrimMaterial
+    GL.activeTexture $= GL.TextureUnit albedoTextureUnit
+    GL.textureBinding GL.Texture2D $= mTexture
+    -- Draw
+    GL.bindVertexArrayObject $= Just meshPrimVao
+    GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedShort
+      nullPtr
+    -- Unbind
+    GL.bindVertexArrayObject $= Nothing
+    GL.activeTexture $= GL.TextureUnit albedoTextureUnit
+    GL.textureBinding GL.Texture2D $= Nothing

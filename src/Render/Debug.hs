@@ -15,7 +15,7 @@ import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
 import qualified Graphics.Rendering.OpenGL as GL
-import Linear ((!*!))
+import Linear (M44, (!*!))
 import qualified Linear as L
 import Text.Printf
 
@@ -53,16 +53,31 @@ createDebugGizmoOverlayer env = do
     let cameraViewM = Cam.toViewMatrix camera :: L.M44 GL.GLfloat
     -- Make the view matrix translation fixed so the gizmo is always in view.
     viewM <- M.toGlMatrix . (M.translate 0 0 (-100) !*!)
-               . set L._w (L.V4 0 0 0 1) . L.m33_to_m44
-               $ cameraViewM ^. L._m33
+               . set L.translation 0 $ cameraViewM
     viewMUniform $= viewM
     projection <- M.toGlMatrix . M.perspectiveProjection 0.1 1000
       . windowAspectRatio $ env
     projectionMUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     GL.clear [GL.DepthBuffer]
-    renderModel pipeline model
+    traverseModel_ (renderMeshPrimitive pipeline) model
     unbindPipeline
     return ()
+ where
+  renderMeshPrimitive :: Pipeline -> M44 Float -> MeshPrimitive -> IO ()
+  renderMeshPrimitive pipeline modelMatrix' MeshPrimitive{..} = do
+    -- Set model matrix
+    modelMatrix <- M.toGlMatrix modelMatrix'
+    let modelMatrixUniform = pipelineUniform pipeline "modelM"
+    modelMatrixUniform $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
+    -- Set textures
+    let mTexture = materialBaseColorTexture =<< meshPrimMaterial
+    GL.activeTexture $= GL.TextureUnit 0
+    GL.textureBinding GL.Texture2D $= mTexture
+    -- Draw
+    GL.bindVertexArrayObject $= Just meshPrimVao
+    GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedShort
+      nullPtr
+    GL.bindVertexArrayObject $= Nothing
 
 createDebugInfoOverlayer :: Env -> IORef POSIXTime -> IO (Frame -> IO ())
 createDebugInfoOverlayer env timeRef = do

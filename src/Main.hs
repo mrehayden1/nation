@@ -46,8 +46,9 @@ main = do
     -- Used to get the time the frame was last refreshed
     timeRef <- newIORef 0
     -- Create graphics elements
-    monument <- fromGlbFile "assets/models/monument.glb"
-    let scene = [monument]
+    --model <- fromGlbFile "assets/models/reference_frame.glb"
+    model <- fromGlbFile "assets/models/monument.glb"
+    let scene = [model]
     -- Create a depth buffer object and depth map texture
     (shadowDepthMapTexture, renderShadowDepthMap) <- createShadowDepthMapper scene
     -- Create renderers
@@ -61,7 +62,7 @@ main = do
           when shouldOverlayLightDepthQuad overlayDebugQuad
           when shouldOverlayDebugInfo $ do
             overlayDebugInfo frame
-            overlayGizmo worldState
+            unless shouldOverlayLightDepthQuad $ overlayGizmo worldState
           GLFW.swapBuffers win
     -- Enter game loop
     runHeadlessApp $ do
@@ -132,7 +133,6 @@ initialise = do
     GL.debugOutput $= GL.Enabled
     GL.debugOutputSynchronous $= GL.Enabled
     GL.debugMessageCallback $= Just printDebugMessage
-  -- MOUSE
   -- Hide cursor
   GLFW.setCursorInputMode window GLFW.CursorInputMode'Disabled
   -- Capture raw mouse motion if supported
@@ -142,7 +142,6 @@ initialise = do
       GLFW.setRawMouseMotion window True
     else
       putStrLn "Raw mouse motion unsupported."
-  -- GRAPHICS
   -- Vsync
   GLFW.swapInterval $ if vsyncEnabled then 1 else 0
   -- Enable depth testing

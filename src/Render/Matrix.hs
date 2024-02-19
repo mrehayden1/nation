@@ -4,8 +4,8 @@ module Render.Matrix (
   directionalLightProjection,
   directionalLightViewMatrix,
 
+  scale,
   translate,
-  uniformScale,
   rotateX,
   rotateY,
   rotateZ,
@@ -61,13 +61,11 @@ perspectiveProjection near far aspectRatio =
   L.perspective (fov * pi / 180) aspectRatio near far
  where fov = 45
 
-uniformScale :: Num a => a -> M44 a
-uniformScale s =
-  V4
-    (V4 s 0 0 0)
-    (V4 0 s 0 0)
-    (V4 0 0 s 0)
-    (V4 0 0 0 1)
+scale :: Num a => V3 a -> M44 a
+scale (V3 x y z) = V4 (V4 x 0 0 0)
+                      (V4 0 y 0 0)
+                      (V4 0 0 z 0)
+                      (V4 0 0 0 1)
 
 translate :: Num a => a -> a -> a -> M44 a
 translate x y z =

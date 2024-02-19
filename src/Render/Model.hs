@@ -1,42 +1,69 @@
 module Render.Model (
   Model,
-  fromGlbFile,
-  deleteModel,
+  SceneNode(..),
+  MeshPrimitive(..),
+  Material(..),
 
-  renderModel
+  traverseModel_,
+
+  fromGlbFile,
+
+  deleteModel
 ) where
 
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Data.Foldable
 import Data.Maybe
 import qualified Data.Set as Set
 import Data.StateVar
+import Data.Tree
 import Data.Vector (Vector, (!))
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as S
 import Data.Word
 import Foreign
 import qualified Graphics.Rendering.OpenGL as GL
-import Linear (M44, V3(..), V4(..), (!*!))
+import Linear (V4(..), (!*!))
 import qualified Linear as L
+import System.IO.Unsafe
 import Text.GLTF.Loader (Gltf(..))
 import qualified Text.GLTF.Loader as G
 
 import Render.Matrix as M
-import Render.Pipeline
+import qualified Render.Texture as T
 
-newtype Model = Model {
-  -- A mesh is a list of mesh primitives and their local model matrices
-  modelMeshes :: Vector (L.M44 Float, Vector MeshPrimitive)
+type Model = [Tree SceneNode]
+
+type Mesh = Vector MeshPrimitive
+
+-- TODO Increase strictness so all data loads ahead of render.
+data SceneNode = SceneNode {
+  nodeMesh :: Maybe Mesh,
+  nodeMatrix :: L.M44 Float
 }
 
--- Renderable mesh components
 data MeshPrimitive = MeshPrimitive {
-  meshGlPrimitiveMode :: GL.PrimitiveMode,
-  meshVao :: GL.VertexArrayObject,
-  meshVbo :: [GL.BufferObject],
-  meshEbo :: GL.BufferObject,
-  meshNumIndices :: GL.NumArrayIndices
+  meshPrimMaterial :: Maybe Material,
+  meshPrimGlMode :: GL.PrimitiveMode,
+  meshPrimVao :: GL.VertexArrayObject,
+  meshPrimVbo :: [GL.BufferObject],
+  meshPrimEbo :: GL.BufferObject,
+  meshPrimNumIndices :: GL.NumArrayIndices
 }
+
+data Material = Material {
+  materialBaseColorFactor :: V4 Float,
+  materialBaseColorTexture :: Maybe GL.TextureObject
+}
+
+traverseModel_ :: Monad m
+  => (L.M44 Float -> MeshPrimitive -> m ())
+  -> Model
+  -> m ()
+traverseModel_ render = mapM_ (traverse_ traverseMesh_)
+ where
+  traverseMesh_ SceneNode{..} = mapM_ (mapM_ (render nodeMatrix)) nodeMesh
 
 fromGlbFile :: FilePath -> IO Model
 fromGlbFile pathname = do
@@ -45,39 +72,86 @@ fromGlbFile pathname = do
     Left  _ -> fail "loadModel: Failed to read GLB."
     Right g -> return $ G.unGltf g
   let Gltf{..} = gltf
-  -- TODO Traverse the scene graph and apply transformations
-  meshes <- createMeshes gltfMeshes gltfNodes
-  return $ Model meshes
+  -- Traverse the scene graph and accumulate the transformations
+  textures <- mapM (loadTexture gltfImages gltfSamplers) gltfTextures
+  let materials = fmap (getMaterial textures) gltfMaterials
+  meshes <- mapM (mapM (loadMeshPrimitive materials) . G.meshPrimitives) gltfMeshes
+  let scene = makeSceneGraph gltfNodes meshes
+  return scene
  where
-  createMeshes :: Vector G.Mesh
-    -> Vector G.Node
-    -> IO (Vector (L.M44 Float, Vector MeshPrimitive))
-  createMeshes meshes nodes =
+  makeSceneGraph :: Vector G.Node -> Vector Mesh -> [Tree SceneNode]
+  makeSceneGraph nodes meshes =
+    -- Find the roots of the scene graph
     let childrenIx = Set.fromList . toList . foldMap G.nodeChildren $ nodes
         roots = V.ifilter (\i _ -> i `Set.notMember` childrenIx) nodes
-    in fmap V.fromList . mapM (\(t, m) -> (t,) <$> mapM loadMeshPrimitive m)
-         . concatMap (accum L.identity) $ roots
+    -- Accumulate the transformations recursively and save them in each node
+    in toList . fmap (accumTransformation L.identity) $ roots
    where
-    accum :: L.M44 Float
-      -> G.Node
-      -> [(L.M44 Float, Vector G.MeshPrimitive)]
-    accum t G.Node{..} =
-      let s = maybe L.identity scale nodeScale
-          tr = fromMaybe L.identity $
-                 L.mkTransformation <$> nodeRotation <*> nodeTranslation
-          str = tr !*! s
-          t' = str !*! t
-          mesh = (t',) . maybe mempty (G.meshPrimitives . (meshes !))
-                   $ nodeMeshId
-          children = fmap (nodes !) nodeChildren
-          childMeshes = concatMap (accum t') children
-      in mesh : childMeshes
-     where
-      scale :: Num a => V3 a -> M44 a
-      scale (V3 x y z) = V4 (V4 x 0 0 0) (V4 0 y 0 0) (V4 0 0 z 0) (V4 0 0 0 1)
+    accumTransformation :: L.M44 Float -> G.Node -> Tree SceneNode
+    accumTransformation m G.Node{..} =
+      let s = maybe L.identity M.scale nodeScale
+          r = maybe L.identity L.fromQuaternion nodeRotation
+          t = fromMaybe 0 nodeTranslation
+          tr = L.mkTransformationMat r t
+          trs = tr !*! s
+          m' = m !*! trs
+          ns = toList . fmap (accumTransformation m' . (nodes !))
+                 $ nodeChildren
+          mesh = fmap (meshes !) nodeMeshId
+      in Node (SceneNode mesh m') ns
 
-loadMeshPrimitive :: G.MeshPrimitive -> IO MeshPrimitive
-loadMeshPrimitive G.MeshPrimitive{..} = do
+{-# NOINLINE defaultImageData #-}
+defaultImageData :: ByteString
+defaultImageData = unsafePerformIO $ do
+  putStrLn "Reading default image texture."
+  BS.readFile "assets/textures/missing-texture.png"
+
+loadTexture :: Vector G.Image
+  -> Vector G.Sampler
+  -> G.Texture
+  -> IO GL.TextureObject
+loadTexture images samplers G.Texture{..} = do
+  let mSampler = fmap (samplers !) textureSamplerId
+      wrapS = maybe T.Repeat (toWrapMode . G.samplerWrapS) mSampler
+      wrapT = maybe T.Repeat (toWrapMode . G.samplerWrapS) mSampler
+      minF = maybe (T.Nearest, Nothing) toMinFilter
+               $ G.samplerMinFilter =<< mSampler
+      magF = maybe T.Nearest toMagFilter
+               $ G.samplerMagFilter =<< mSampler
+  let image = fromMaybe defaultImageData
+                $ G.imageData . (images !) =<< textureSourceId
+  -- TODO Don't linearise every texture
+  T.loadTexture True minF magF wrapS wrapT image
+ where
+  toMinFilter :: G.MinFilter -> T.MinificationFilter
+  toMinFilter f = case f of
+    G.MinNearest              -> (T.Nearest, Nothing)
+    G.MinLinear               -> (T.Linear', Nothing)
+    G.MinNearestMipmapNearest -> (T.Nearest, Just T.Nearest)
+    G.MinLinearMipmapNearest  -> (T.Linear', Just T.Nearest) 
+    G.MinNearestMipmapLinear  -> (T.Nearest, Just T.Linear')
+    G.MinLinearMipmapLinear   -> (T.Linear', Just T.Linear')
+
+  toMagFilter :: G.MagFilter -> T.MagnificationFilter
+  toMagFilter f = case f of
+    G.MagLinear  -> T.Linear'
+    G.MagNearest -> T.Nearest
+
+  toWrapMode :: G.SamplerWrap -> T.TextureWrapMode
+  toWrapMode w = case w of
+    G.ClampToEdge    -> T.ClampToEdge
+    G.MirroredRepeat -> T.MirroredRepeat
+    G.Repeat         -> T.Repeat
+
+getMaterial :: Vector GL.TextureObject -> G.Material -> Material
+getMaterial textures G.Material{..} =
+  let colorFactor = maybe 1 G.pbrBaseColorFactor materialPbrMetallicRoughness
+      colorTexture = (textures !) . G.textureId <$>
+        (G.pbrBaseColorTexture =<< materialPbrMetallicRoughness)
+  in Material colorFactor colorTexture
+
+loadMeshPrimitive :: Vector Material -> G.MeshPrimitive -> IO MeshPrimitive
+loadMeshPrimitive materials G.MeshPrimitive{..} = do
   -- Create and bind VAO
   vao <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vao
@@ -93,13 +167,16 @@ loadMeshPrimitive G.MeshPrimitive{..} = do
       -- Position
       loadVertexAttribute 0 3 meshPrimitivePositions,
       -- Normals
-      loadVertexAttribute 1 3 meshPrimitiveNormals
+      loadVertexAttribute 1 3 meshPrimitiveNormals,
       -- Texture co-ordinates
+      loadVertexAttribute 2 2 meshPrimitiveTexCoords
     ]
   GL.bindVertexArrayObject $= Nothing
   GL.bindBuffer GL.ElementArrayBuffer $= Nothing
   GL.bindBuffer GL.ArrayBuffer $= Nothing
-  return . MeshPrimitive (toGlPrimitiveMode meshPrimitiveMode) vao vbos ebo
+  let mode = toGlPrimitiveMode meshPrimitiveMode
+      material = fmap (materials !) meshPrimitiveMaterial
+  return $ MeshPrimitive material mode vao vbos ebo
     . fromIntegral . length $ meshPrimitiveIndices
  where
   loadVertexAttribute location components attrs = do
@@ -115,7 +192,7 @@ loadMeshPrimitive G.MeshPrimitive{..} = do
        GL.VertexArrayDescriptor
          (fromIntegral components)
          GL.Float
-         0 -- stride=0, only one attribute
+         0 -- stride=0, only one attribute per buffer
          nullPtr
       )
     GL.vertexAttribArray attrLoc $= GL.Enabled
@@ -133,21 +210,3 @@ toGlPrimitiveMode p = case p of
 
 deleteModel :: Model -> IO ()
 deleteModel = undefined
-
--- Renders a model in the current GL pipeline
-renderModel :: Pipeline -> Model -> IO ()
-renderModel pipeline Model{..} = do
-  mapM_ (uncurry renderMesh) modelMeshes
- where
-  renderMesh :: L.M44 Float -> Vector MeshPrimitive -> IO ()
-  renderMesh modelMatrix = mapM_ (renderMeshPrimitive modelMatrix)
-
-  renderMeshPrimitive :: L.M44 Float -> MeshPrimitive -> IO ()
-  renderMeshPrimitive modelMatrix' MeshPrimitive{..} = do
-    -- Set model matrix
-    modelMatrix <- M.toGlMatrix modelMatrix'
-    let modelMatrixUniform = pipelineUniform pipeline "modelM"
-    modelMatrixUniform $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
-    GL.bindVertexArrayObject $= Just meshVao
-    GL.drawElements meshGlPrimitiveMode meshNumIndices GL.UnsignedShort nullPtr
-    GL.bindVertexArrayObject $= Nothing

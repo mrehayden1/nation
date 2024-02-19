@@ -1,11 +1,13 @@
 #version 460 core
-in vec4 LightClipPosition;
-in vec3 Normal; // In view space
+in vec4 LightClipPos;
+in vec3 Normal;
 in vec3 WorldPosition;
+in vec2 TexCoords;
 
 out vec4 FragColor;
 
-uniform sampler2D lightDepthMap;
+layout (binding = 0) uniform sampler2D lightDepthMap;
+layout (binding = 1) uniform sampler2D albedoTexture;
 
 uniform float ambientIntensity;
 uniform vec3 lightDirection;
@@ -46,28 +48,19 @@ float ShadowCalculation(vec4 clipPos)
 
 void main()
 {
-  vec3 objectColour = vec3(1.0f, 1.0f, 1.0f);
   vec3 lightColour = vec3(1.0f, 1.0f, 1.0f);
-  // Point light source
-  // Unidirectional light source (e.g. sunlight)
-  vec3 lightViewDirection = normalize(mat3(viewM) * lightDirection);
   // Ambient light
   vec3 ambient = ambientIntensity * lightColour;
   // Diffuse light
-  vec3 diffuse = max(dot(Normal, lightViewDirection), 0.0f) * lightColour;
-  // Specular lighting
-  /*
-     float specularIntensity = 1;
-     vec3 viewDirection = normalize(-WorldPosition);
-     vec3 reflectDirection = reflect(-lightViewDirection, Normal); 
-     vec3 specular = specularIntensity
-       * pow(max(dot(viewDirection, reflectDirection), 0.0), 128)
-       * lightColour;  
-   */
-  vec3 specular = vec3(0.0, 0.0, 0.0);
+  vec3 diffuse = max(dot(Normal, lightDirection), 0.0f) * lightColour;
   // Shadow
-  float shadow = ShadowCalculation(LightClipPosition);
+  float shadow = ShadowCalculation(LightClipPos);
 
-  vec3 lighting = ambient + (1.0 - shadow) * (diffuse + specular) * objectColour;
-  FragColor = vec4(lighting, 1.0);
+  vec3 lighting = (ambient + (1.0 - shadow) * diffuse) * texture(albedoTexture, TexCoords).rgb;
+
+  FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+
+  // Gamma correction
+  float gamma = 2.2;
+  FragColor.rgb = pow(lighting.rgb, vec3(1.0/gamma));
 } 
