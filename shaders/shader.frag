@@ -15,9 +15,6 @@ uniform mat4 viewM;
 
 float ShadowCalculation(vec4 clipPos)
 {
-  // remove shadow acne
-  float bias = max(0.05 * (1.0 - dot(Normal, lightDirection)), 0.005);
-
   // perform perspective divide
   vec3 ndcCoords = clipPos.xyz / clipPos.w;
   // transform to [0,1] range
@@ -30,6 +27,7 @@ float ShadowCalculation(vec4 clipPos)
     float currentDepth = mapCoords.z;
     // calculate shadow using percentage close filtering
     vec2 texelSize = 1.0 / textureSize(lightDepthMap, 0);
+    float bias = max(0.005 * (1.0 - dot(Normal, lightDirection)), 0.005);
     int pcfWidth = 3;
     int pcfXYMin = -(pcfWidth - 1) / 2;
     int pcfXYMax = pcfWidth / 2;
@@ -37,7 +35,9 @@ float ShadowCalculation(vec4 clipPos)
     {
       for(int y = pcfXYMin; y <= pcfXYMax; ++y)
       {
-        float pcfDepth = texture(lightDepthMap, mapCoords.xy + vec2(x, y) * texelSize).r;
+        float pcfDepth = texture(
+          lightDepthMap, mapCoords.xy + vec2(x, y) * texelSize
+        ).r;
         shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
       }
     }
