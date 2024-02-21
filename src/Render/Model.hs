@@ -11,6 +11,7 @@ module Render.Model (
   deleteModel
 ) where
 
+import Codec.Picture
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Foldable
@@ -20,7 +21,7 @@ import Data.StateVar
 import Data.Tree
 import Data.Vector (Vector, (!))
 import qualified Data.Vector as V
-import qualified Data.Vector.Storable as S
+import qualified Data.Vector.Storable as SV
 import Data.Word
 import Foreign
 import qualified Graphics.Rendering.OpenGL as GL
@@ -44,7 +45,7 @@ data SceneNode = SceneNode {
 }
 
 data MeshPrimitive = MeshPrimitive {
-  meshPrimMaterial :: Maybe Material,
+  meshPrimMaterial :: Material,
   meshPrimGlMode :: GL.PrimitiveMode,
   meshPrimVao :: GL.VertexArrayObject,
   meshPrimVbo :: [GL.BufferObject],
@@ -54,7 +55,7 @@ data MeshPrimitive = MeshPrimitive {
 
 data Material = Material {
   materialBaseColorFactor :: V4 Float,
-  materialBaseColorTexture :: Maybe GL.TextureObject
+  materialBaseColorTexture :: GL.TextureObject
 }
 
 traverseModel_ :: Monad m
@@ -74,7 +75,7 @@ fromGlbFile pathname = do
   let Gltf{..} = gltf
   -- Traverse the scene graph and accumulate the transformations
   textures <- mapM (loadTexture gltfImages gltfSamplers) gltfTextures
-  let materials = fmap (getMaterial textures) gltfMaterials
+  let materials = fmap (loadMaterial textures) gltfMaterials
   meshes <- mapM (mapM (loadMeshPrimitive materials) . G.meshPrimitives) gltfMeshes
   let scene = makeSceneGraph gltfNodes meshes
   return scene
@@ -100,11 +101,27 @@ fromGlbFile pathname = do
           mesh = fmap (meshes !) nodeMeshId
       in Node (SceneNode mesh m') ns
 
-{-# NOINLINE defaultImageData #-}
-defaultImageData :: ByteString
-defaultImageData = unsafePerformIO $ do
+{-# NOINLINE missingImageData #-}
+missingImageData :: ByteString
+missingImageData = unsafePerformIO $ do
   putStrLn "Reading default image texture."
   BS.readFile "assets/textures/missing-texture.png"
+
+{-# NOINLINE identityTexture #-}
+-- Multiplicative identity used when a material has no texture so we have
+-- something to multiply the pbrBaseColorFactor by.
+identityTexture :: GL.TextureObject
+identityTexture =
+  let image = (Image 1 1 . SV.fromList $ [255, 255, 255]) :: Image PixelRGB8
+  in unsafePerformIO
+       . T.fromImage False (T.Nearest, Nothing) T.Nearest T.Repeat T.Repeat
+       $ image
+
+defaultColorFactor :: Num a => L.V4 a
+defaultColorFactor = 1
+
+defaultMaterial :: Material
+defaultMaterial = Material defaultColorFactor identityTexture
 
 loadTexture :: Vector G.Image
   -> Vector G.Sampler
@@ -118,17 +135,17 @@ loadTexture images samplers G.Texture{..} = do
                $ G.samplerMinFilter =<< mSampler
       magF = maybe T.Nearest toMagFilter
                $ G.samplerMagFilter =<< mSampler
-  let image = fromMaybe defaultImageData
+  let image = fromMaybe missingImageData
                 $ G.imageData . (images !) =<< textureSourceId
   -- TODO Don't linearise every texture
-  T.loadTexture True minF magF wrapS wrapT image
+  T.decodeImage True minF magF wrapS wrapT image
  where
   toMinFilter :: G.MinFilter -> T.MinificationFilter
   toMinFilter f = case f of
     G.MinNearest              -> (T.Nearest, Nothing)
     G.MinLinear               -> (T.Linear', Nothing)
     G.MinNearestMipmapNearest -> (T.Nearest, Just T.Nearest)
-    G.MinLinearMipmapNearest  -> (T.Linear', Just T.Nearest) 
+    G.MinLinearMipmapNearest  -> (T.Linear', Just T.Nearest)
     G.MinNearestMipmapLinear  -> (T.Nearest, Just T.Linear')
     G.MinLinearMipmapLinear   -> (T.Linear', Just T.Linear')
 
@@ -143,11 +160,14 @@ loadTexture images samplers G.Texture{..} = do
     G.MirroredRepeat -> T.MirroredRepeat
     G.Repeat         -> T.Repeat
 
-getMaterial :: Vector GL.TextureObject -> G.Material -> Material
-getMaterial textures G.Material{..} =
-  let colorFactor = maybe 1 G.pbrBaseColorFactor materialPbrMetallicRoughness
-      colorTexture = (textures !) . G.textureId <$>
-        (G.pbrBaseColorTexture =<< materialPbrMetallicRoughness)
+loadMaterial :: Vector GL.TextureObject -> G.Material -> Material
+loadMaterial textures G.Material{..} =
+  -- TODO Make color factor impact model color - maybe mix with texture to
+  -- make a single albedo?
+  let colorFactor = maybe defaultColorFactor G.pbrBaseColorFactor
+                      materialPbrMetallicRoughness
+      colorTexture = maybe identityTexture ((textures !) . G.textureId) $
+        G.pbrBaseColorTexture =<< materialPbrMetallicRoughness
   in Material colorFactor colorTexture
 
 loadMeshPrimitive :: Vector Material -> G.MeshPrimitive -> IO MeshPrimitive
@@ -158,7 +178,7 @@ loadMeshPrimitive materials G.MeshPrimitive{..} = do
   -- Load indices
   ebo <- GL.genObjectName
   GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-  S.unsafeWith (V.convert meshPrimitiveIndices) $ \ptr -> do
+  SV.unsafeWith (V.convert meshPrimitiveIndices) $ \ptr -> do
     let size = fromIntegral . (* sizeOf (undefined :: Word16)) . length
                  $ meshPrimitiveIndices
     GL.bufferData GL.ElementArrayBuffer $= (size, ptr, GL.StaticDraw)
@@ -175,14 +195,14 @@ loadMeshPrimitive materials G.MeshPrimitive{..} = do
   GL.bindBuffer GL.ElementArrayBuffer $= Nothing
   GL.bindBuffer GL.ArrayBuffer $= Nothing
   let mode = toGlPrimitiveMode meshPrimitiveMode
-      material = fmap (materials !) meshPrimitiveMaterial
+      material = maybe defaultMaterial (materials !) meshPrimitiveMaterial
   return $ MeshPrimitive material mode vao vbos ebo
     . fromIntegral . length $ meshPrimitiveIndices
  where
   loadVertexAttribute location components attrs = do
     vbo <- GL.genObjectName
     GL.bindBuffer GL.ArrayBuffer $= Just vbo
-    S.unsafeWith (V.convert attrs) $ \ptr -> do
+    SV.unsafeWith (V.convert attrs) $ \ptr -> do
       let size = fromIntegral . (* sizeOf (undefined :: Float))
                    . (* components) . length $ attrs
       GL.bufferData GL.ArrayBuffer $= (size, ptr, GL.StaticDraw)

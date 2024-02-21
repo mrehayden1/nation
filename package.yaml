@@ -54,6 +54,7 @@ ghc-options:
 - -Wredundant-constraints
 
 default-extensions:
+- AllowAmbiguousTypes
 - DeriveGeneric
 - FlexibleContexts
 - LambdaCase
@@ -63,6 +64,7 @@ default-extensions:
 - RecursiveDo
 - ScopedTypeVariables
 - TupleSections
+- TypeApplications
 - TypeFamilies
 
 executables:

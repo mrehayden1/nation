@@ -40,7 +40,7 @@ data MsdfFontMeta = MsdfFontMeta {
 } deriving (Show, Generic)
 
 instance FromJSON MsdfFontMeta
- 
+
 data FontAtlasMeta = FontAtlasMeta {
   atlasType :: FontAtlasTextureType,
   distanceRange :: Int,
@@ -129,6 +129,6 @@ loadFont fontName = do
   let fontMeta = fromMaybe (error $ "Failed to parse font " ++ fontName)
         . decode $ content
       texturePath = fontPath ++ ".png"
-  texture <- readTexture False (Linear', Nothing) Linear' ClampToEdge
+  texture <- readImage False (Linear', Nothing) Linear' ClampToEdge
                ClampToEdge texturePath
   return $ MsdfFont fontMeta texture

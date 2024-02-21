@@ -87,9 +87,9 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     normalMatrix <- M.toGlMatrix . L.m33_to_m44 $ transposeInverseModelMatrix
     normalMatrixUniform $= (normalMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set textures
-    let mTexture = materialBaseColorTexture =<< meshPrimMaterial
+    let texture = materialBaseColorTexture meshPrimMaterial
     GL.activeTexture $= GL.TextureUnit albedoTextureUnit
-    GL.textureBinding GL.Texture2D $= mTexture
+    GL.textureBinding GL.Texture2D $= Just texture
     -- Draw
     GL.bindVertexArrayObject $= Just meshPrimVao
     GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedShort

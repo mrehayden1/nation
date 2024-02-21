@@ -70,9 +70,9 @@ createDebugGizmoOverlayer env = do
     let modelMatrixUniform = pipelineUniform pipeline "modelM"
     modelMatrixUniform $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set textures
-    let mTexture = materialBaseColorTexture =<< meshPrimMaterial
+    let texture = materialBaseColorTexture meshPrimMaterial
     GL.activeTexture $= GL.TextureUnit 0
-    GL.textureBinding GL.Texture2D $= mTexture
+    GL.textureBinding GL.Texture2D $= Just texture
     -- Draw
     GL.bindVertexArrayObject $= Just meshPrimVao
     GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedShort
