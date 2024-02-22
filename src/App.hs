@@ -161,11 +161,13 @@ game eInput = do
 
   playerPositionCamera :: Floating a => a -> a -> Camera a
   playerPositionCamera x z =
-    Camera {
-      camPitch = negate $ (3 * pi) / 8,
-        camPos = L.V3 x 10 (z + 3),
-        camYaw = pi / 2
-    }
+    let th = (3 * pi) / 8
+        h  = 30
+    in Camera {
+         camPitch = negate th,
+         camPos = L.V3 x h (z + h / tan th),
+         camYaw = pi / 2
+       }
 
   lightDirection :: (L.Epsilon a, Floating a) => a -> L.V3 a
   lightDirection pitch = 
