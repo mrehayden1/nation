@@ -16,7 +16,6 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Foldable
 import Data.Maybe
-import qualified Data.Set as Set
 import Data.StateVar
 import Data.Tree
 import Data.Vector (Vector, (!))
@@ -77,16 +76,17 @@ fromGlbFile pathname = do
   textures <- mapM (loadTexture gltfImages gltfSamplers) gltfTextures
   let materials = fmap (loadMaterial textures) gltfMaterials
   meshes <- mapM (mapM (loadMeshPrimitive materials) . G.meshPrimitives) gltfMeshes
-  let scene = makeSceneGraph gltfNodes meshes
+  let scene = makeSceneGraph gltfScenes gltfNodes meshes
   return scene
  where
-  makeSceneGraph :: Vector G.Node -> Vector Mesh -> [Tree SceneNode]
-  makeSceneGraph nodes meshes =
-    -- Find the roots of the scene graph
-    let childrenIx = Set.fromList . toList . foldMap G.nodeChildren $ nodes
-        roots = V.ifilter (\i _ -> i `Set.notMember` childrenIx) nodes
+  makeSceneGraph :: Vector G.Scene
+    -> Vector G.Node
+    -> Vector Mesh
+    -> [Tree SceneNode]
+  makeSceneGraph scenes nodes meshes =
+    let rootIxs = if null scenes then mempty else G.sceneNodes $ V.head scenes
     -- Accumulate the transformations recursively and save them in each node
-    in toList . fmap (accumTransformation L.identity) $ roots
+    in toList . fmap (accumTransformation L.identity . (nodes !)) $ rootIxs
    where
     accumTransformation :: L.M44 Float -> G.Node -> Tree SceneNode
     accumTransformation m G.Node{..} =
