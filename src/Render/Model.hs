@@ -196,8 +196,8 @@ loadMeshPrimitive materials G.MeshPrimitive{..} = do
   GL.bindBuffer GL.ArrayBuffer $= Nothing
   let mode = toGlPrimitiveMode meshPrimitiveMode
       material = maybe defaultMaterial (materials !) meshPrimitiveMaterial
-  return $ MeshPrimitive material mode vao vbos ebo
-    . fromIntegral . length $ meshPrimitiveIndices
+  return . MeshPrimitive material mode vao vbos ebo . fromIntegral . length
+    $ meshPrimitiveIndices
  where
   loadVertexAttribute location components attrs = do
     vbo <- GL.genObjectName

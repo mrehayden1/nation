@@ -44,7 +44,7 @@ float ShadowCalculation(vec4 clipPos)
     shadow /= pow(pcfWidth, 2);
   }
   return shadow;
-}  
+}
 
 void main()
 {
@@ -63,4 +63,4 @@ void main()
   // Gamma correction
   float gamma = 2.2;
   FragColor.rgb = pow(lighting.rgb, vec3(1.0/gamma));
-} 
+}

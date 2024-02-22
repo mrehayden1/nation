@@ -71,7 +71,7 @@ fromDynamicImage srgb minF magF wrapS wrapT dynamicImage = do
                        . convertImage $ i
     -- RGBA
     ImageRGBA8  i -> fromImage srgb minF magF wrapS wrapT i
-    -- Missing support for the following image formats
+    -- Missing support for the following pixel formats
     --ImageY8 (Image Pixel8)
     --ImageY16 (Image Pixel16)
     --ImageY32 (Image Pixel32)
