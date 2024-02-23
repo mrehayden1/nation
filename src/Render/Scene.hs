@@ -16,9 +16,10 @@ import qualified Render.Matrix as M
 import Render.Pipeline
 import Vector as V
 
-shadowMapTextureUnit, albedoTextureUnit :: Integral a => a
+shadowMapTextureUnit, albedoTextureUnit, normalMapTextureUnit :: Integral a => a
 shadowMapTextureUnit = 0
 albedoTextureUnit = 1
+normalMapTextureUnit = 2
 
 createSceneRenderer :: Env -> [Model] -> GL.TextureObject -> IO (WorldState -> IO ())
 createSceneRenderer env@Env{..} scene shadowDepthMap = do
@@ -79,17 +80,16 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     let normalMatrixUniform = pipelineUniform pipeline "normalM"
     let transposeInverseModelMatrix = (^. L._m33) . L.transpose . L.inv44
           $ modelMatrix
-    {-
-    normalMatrix <- M.toGlMatrix . L.m33_to_m44
-      . (transposeInverseModelMatrix L.!!/)
-      . L.det33 $ transposeInverseModelMatrix
-    -}
     normalMatrix <- M.toGlMatrix . L.m33_to_m44 $ transposeInverseModelMatrix
     normalMatrixUniform $= (normalMatrix :: GL.GLmatrix GL.GLfloat)
-    -- Set textures
+    -- Set albedo textures
     let texture = materialBaseColorTexture meshPrimMaterial
     GL.activeTexture $= GL.TextureUnit albedoTextureUnit
     GL.textureBinding GL.Texture2D $= Just texture
+    -- Set normal map
+    let normalMap = materialNormalMap meshPrimMaterial
+    GL.activeTexture $= GL.TextureUnit normalMapTextureUnit
+    GL.textureBinding GL.Texture2D $= Just normalMap
     -- Draw
     GL.bindVertexArrayObject $= Just meshPrimVao
     GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedShort

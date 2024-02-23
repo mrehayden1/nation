@@ -11,10 +11,11 @@ module Render.Model (
   deleteModel
 ) where
 
+import Control.Monad
 import Codec.Picture
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Data.Foldable
+import Data.Foldable as F
 import Data.Maybe
 import Data.StateVar
 import Data.Tree
@@ -54,7 +55,9 @@ data MeshPrimitive = MeshPrimitive {
 
 data Material = Material {
   materialBaseColorFactor :: V4 Float,
-  materialBaseColorTexture :: GL.TextureObject
+  materialBaseColorTexture :: GL.TextureObject,
+  materialNormalMap :: GL.TextureObject,
+  materialNormalMapScale :: Float
 }
 
 traverseModel_ :: Monad m
@@ -72,21 +75,27 @@ fromGlbFile pathname = do
     Left  _ -> fail "loadModel: Failed to read GLB."
     Right g -> return $ G.unGltf g
   let Gltf{..} = gltf
-  -- Traverse the scene graph and accumulate the transformations
-  textures <- mapM (loadTexture gltfImages gltfSamplers) gltfTextures
+      baseColorTextureIxs = V.catMaybes . fmap getMaterialBaseColorTextureId
+        $ gltfMaterials
+  textures <- mapM (uncurry $ loadTexture gltfImages gltfSamplers)
+                . V.imap (\i t -> (i `elem` baseColorTextureIxs, t))
+                $ gltfTextures
   let materials = fmap (loadMaterial textures) gltfMaterials
   meshes <- mapM (mapM (loadMeshPrimitive materials) . G.meshPrimitives) gltfMeshes
+  -- Traverse the scene graph and accumulate the transformations
   let scene = makeSceneGraph gltfScenes gltfNodes meshes
   return scene
  where
+  getMaterialBaseColorTextureId = pure . G.textureId <=< G.pbrBaseColorTexture <=< G.materialPbrMetallicRoughness
+
   makeSceneGraph :: Vector G.Scene
     -> Vector G.Node
     -> Vector Mesh
     -> [Tree SceneNode]
   makeSceneGraph scenes nodes meshes =
-    let rootIxs = if null scenes then mempty else G.sceneNodes $ V.head scenes
+    let rootIxs = if F.null scenes then mempty else G.sceneNodes $ V.head scenes
     -- Accumulate the transformations recursively and save them in each node
-    in toList . fmap (accumTransformation L.identity . (nodes !)) $ rootIxs
+    in F.toList . fmap (accumTransformation L.identity . (nodes !)) $ rootIxs
    where
     accumTransformation :: L.M44 Float -> G.Node -> Tree SceneNode
     accumTransformation m G.Node{..} =
@@ -96,7 +105,7 @@ fromGlbFile pathname = do
           tr = L.mkTransformationMat r t
           trs = tr !*! s
           m' = m !*! trs
-          ns = toList . fmap (accumTransformation m' . (nodes !))
+          ns = F.toList . fmap (accumTransformation m' . (nodes !))
                  $ nodeChildren
           mesh = fmap (meshes !) nodeMeshId
       in Node (SceneNode mesh m') ns
@@ -117,17 +126,30 @@ identityTexture =
        . T.fromImage False (T.Nearest, Nothing) T.Nearest T.Repeat T.Repeat
        $ image
 
-defaultColorFactor :: Num a => L.V4 a
-defaultColorFactor = 1
+defaultBaseColorFactor :: Num a => L.V4 a
+defaultBaseColorFactor = 1
+
+defaultNormalMap :: GL.TextureObject
+defaultNormalMap =
+  let image = (Image 1 1 . SV.fromList $ [0, 0, 255]) :: Image PixelRGB8
+  in unsafePerformIO
+       . T.fromImage False (T.Nearest, Nothing) T.Nearest T.Repeat T.Repeat
+       $ image
 
 defaultMaterial :: Material
-defaultMaterial = Material defaultColorFactor identityTexture
+defaultMaterial = Material {
+    materialBaseColorFactor = defaultBaseColorFactor,
+    materialBaseColorTexture = identityTexture,
+    materialNormalMap = defaultNormalMap,
+    materialNormalMapScale = 1
+  }
 
 loadTexture :: Vector G.Image
   -> Vector G.Sampler
+  -> T.SRGB
   -> G.Texture
   -> IO GL.TextureObject
-loadTexture images samplers G.Texture{..} = do
+loadTexture images samplers srgb G.Texture{..} = do
   let mSampler = fmap (samplers !) textureSamplerId
       wrapS = maybe T.Repeat (toWrapMode . G.samplerWrapS) mSampler
       wrapT = maybe T.Repeat (toWrapMode . G.samplerWrapS) mSampler
@@ -138,7 +160,7 @@ loadTexture images samplers G.Texture{..} = do
   let image = fromMaybe missingImageData
                 $ G.imageData . (images !) =<< textureSourceId
   -- TODO Don't linearise every texture
-  T.decodeImage True minF magF wrapS wrapT image
+  T.decodeImage srgb minF magF wrapS wrapT image
  where
   toMinFilter :: G.MinFilter -> T.MinificationFilter
   toMinFilter f = case f of
@@ -162,13 +184,15 @@ loadTexture images samplers G.Texture{..} = do
 
 loadMaterial :: Vector GL.TextureObject -> G.Material -> Material
 loadMaterial textures G.Material{..} =
-  -- TODO Make color factor impact model color - maybe mix with texture to
-  -- make a single albedo?
-  let colorFactor = maybe defaultColorFactor G.pbrBaseColorFactor
+  -- TODO Apply baseColorFactor to baseColorTexture
+  let colorFactor = maybe defaultBaseColorFactor G.pbrBaseColorFactor
                       materialPbrMetallicRoughness
-      colorTexture = maybe identityTexture ((textures !) . G.textureId) $
-        G.pbrBaseColorTexture =<< materialPbrMetallicRoughness
-  in Material colorFactor colorTexture
+      colorTexture = maybe identityTexture ((textures !) . G.textureId)
+        $ G.pbrBaseColorTexture =<< materialPbrMetallicRoughness
+      normalMap = maybe defaultNormalMap ((textures !) . G.normalTextureId)
+                    materialNormalTexture
+      normalMapScale = maybe 1 G.normalTextureScale materialNormalTexture
+  in Material colorFactor colorTexture normalMap normalMapScale
 
 loadMeshPrimitive :: Vector Material -> G.MeshPrimitive -> IO MeshPrimitive
 loadMeshPrimitive materials G.MeshPrimitive{..} = do
@@ -188,8 +212,10 @@ loadMeshPrimitive materials G.MeshPrimitive{..} = do
       loadVertexAttribute 0 3 meshPrimitivePositions,
       -- Normals
       loadVertexAttribute 1 3 meshPrimitiveNormals,
+      -- Tangents
+      loadVertexAttribute 2 4 meshPrimitiveTangents,
       -- Texture co-ordinates
-      loadVertexAttribute 2 2 meshPrimitiveTexCoords
+      loadVertexAttribute 3 2 meshPrimitiveTexCoords
     ]
   GL.bindVertexArrayObject $= Nothing
   GL.bindBuffer GL.ElementArrayBuffer $= Nothing

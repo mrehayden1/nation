@@ -5,6 +5,8 @@ module Render.Texture (
   GL.MinificationFilter,
   GL.MagnificationFilter,
 
+  SRGB,
+
   readImage,
   decodeImage,
   fromImage
@@ -22,6 +24,7 @@ import qualified Data.Vector.Storable as V
 import Foreign.Ptr
 import qualified Graphics.Rendering.OpenGL as GL
 
+-- Wether a loaded texture should be linearised
 type SRGB = Bool
 
 type TextureWrapModeS = TextureWrapMode

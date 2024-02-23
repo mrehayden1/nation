@@ -46,11 +46,13 @@ main = do
     -- Used to get the time the frame was last refreshed
     timeRef <- newIORef 0
     -- Create graphics elements
-    --model <- fromGlbFile "assets/models/reference_frame.glb"
     model <- fromGlbFile "assets/models/monument.glb"
+    --model <- fromGlbFile "assets/models/reference_frame.glb"
+    --model <- fromGlbFile "assets/models/horse.glb"
     let scene = [model]
     -- Create a depth buffer object and depth map texture
-    (shadowDepthMapTexture, renderShadowDepthMap) <- createShadowDepthMapper scene
+    (shadowDepthMapTexture, renderShadowDepthMap)
+      <- createShadowDepthMapper scene
     -- Create renderers
     renderScene <- createSceneRenderer appEnv scene shadowDepthMapTexture
     overlayDebugQuad <- createDebugQuadOverlayer shadowDepthMapTexture

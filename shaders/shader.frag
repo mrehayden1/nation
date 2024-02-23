@@ -1,6 +1,7 @@
 #version 460 core
 in vec4 LightClipPos;
 in vec3 Normal;
+in mat3 TBN;
 in vec3 WorldPosition;
 in vec2 TexCoords;
 
@@ -8,6 +9,7 @@ out vec4 FragColor;
 
 layout (binding = 0) uniform sampler2D lightDepthMap;
 layout (binding = 1) uniform sampler2D albedoTexture;
+layout (binding = 2) uniform sampler2D normalMap;
 
 uniform float ambientIntensity;
 uniform vec3 lightDirection;
@@ -49,10 +51,15 @@ float ShadowCalculation(vec4 clipPos)
 void main()
 {
   vec3 lightColour = vec3(1.0f, 1.0f, 1.0f);
+
+  // Normal mapping
+  vec3 normal = texture(normalMap, TexCoords).rgb;
+  normal = normal * 2.0 - 1.0;
+  normal = normalize(TBN * normal);
   // Ambient light
   vec3 ambient = ambientIntensity * lightColour;
   // Diffuse light
-  vec3 diffuse = max(dot(Normal, lightDirection), 0.0f) * lightColour;
+  vec3 diffuse = max(dot(normal, lightDirection), 0.0f) * lightColour;
   // Shadow
   float shadow = ShadowCalculation(LightClipPos);
 
