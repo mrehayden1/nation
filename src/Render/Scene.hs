@@ -16,10 +16,17 @@ import qualified Render.Matrix as M
 import Render.Pipeline
 import Vector as V
 
-shadowMapTextureUnit, albedoTextureUnit, normalMapTextureUnit :: Integral a => a
+shadowMapTextureUnit :: Integral a => a
 shadowMapTextureUnit = 0
+
+albedoTextureUnit :: Integral a => a
 albedoTextureUnit = 1
-normalMapTextureUnit = 2
+
+metallicRoughnessTextureUnit :: Integral a => a
+metallicRoughnessTextureUnit = 2
+
+normalMapTextureUnit :: Integral a => a
+normalMapTextureUnit = 3
 
 createSceneRenderer :: Env -> [Model] -> GL.TextureObject -> IO (WorldState -> IO ())
 createSceneRenderer env@Env{..} scene shadowDepthMap = do
@@ -59,6 +66,9 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     -- Set light direction
     let lightDirectionUniform = pipelineUniform pipeline "lightDirection"
     lightDirectionUniform $= V.toGlVector3 daylightDirection
+    -- Set camera position
+    let camPosUniform = pipelineUniform pipeline "camPos"
+    camPosUniform $= (V.toGlVector3 . camPos $ camera)
     -- Render
     GL.viewport $= (
         GL.Position 0 0,
@@ -83,9 +93,14 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     normalMatrix <- M.toGlMatrix . L.m33_to_m44 $ transposeInverseModelMatrix
     normalMatrixUniform $= (normalMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set albedo textures
-    let texture = materialBaseColorTexture meshPrimMaterial
+    let albedoTexture = materialBaseColorTexture meshPrimMaterial
     GL.activeTexture $= GL.TextureUnit albedoTextureUnit
-    GL.textureBinding GL.Texture2D $= Just texture
+    GL.textureBinding GL.Texture2D $= Just albedoTexture
+    -- Set metallic/roughness texture
+    let metallicRoughnessTexture = materialMetallicRoughnessTexture
+          meshPrimMaterial
+    GL.activeTexture $= GL.TextureUnit metallicRoughnessTextureUnit
+    GL.textureBinding GL.Texture2D $= Just metallicRoughnessTexture
     -- Set normal map
     let normalMap = materialNormalMap meshPrimMaterial
     GL.activeTexture $= GL.TextureUnit normalMapTextureUnit

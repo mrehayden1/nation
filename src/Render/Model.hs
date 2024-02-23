@@ -57,7 +57,8 @@ data Material = Material {
   materialBaseColorFactor :: V4 Float,
   materialBaseColorTexture :: GL.TextureObject,
   materialNormalMap :: GL.TextureObject,
-  materialNormalMapScale :: Float
+  materialNormalMapScale :: Float,
+  materialMetallicRoughnessTexture :: GL.TextureObject
 }
 
 traverseModel_ :: Monad m
@@ -141,7 +142,8 @@ defaultMaterial = Material {
     materialBaseColorFactor = defaultBaseColorFactor,
     materialBaseColorTexture = identityTexture,
     materialNormalMap = defaultNormalMap,
-    materialNormalMapScale = 1
+    materialNormalMapScale = 1,
+    materialMetallicRoughnessTexture = identityTexture
   }
 
 loadTexture :: Vector G.Image
@@ -184,15 +186,21 @@ loadTexture images samplers srgb G.Texture{..} = do
 
 loadMaterial :: Vector GL.TextureObject -> G.Material -> Material
 loadMaterial textures G.Material{..} =
-  -- TODO Apply baseColorFactor to baseColorTexture
+  -- TODO Apply vertex color and baseColorFactor weights to baseColorTexture
   let colorFactor = maybe defaultBaseColorFactor G.pbrBaseColorFactor
                       materialPbrMetallicRoughness
-      colorTexture = maybe identityTexture ((textures !) . G.textureId)
-        $ G.pbrBaseColorTexture =<< materialPbrMetallicRoughness
+      colorTexture =
+        maybe identityTexture ((textures !) . G.textureId)
+          $ G.pbrBaseColorTexture =<< materialPbrMetallicRoughness
+  -- TODO Apply scaling factor to normal map
       normalMap = maybe defaultNormalMap ((textures !) . G.normalTextureId)
                     materialNormalTexture
       normalMapScale = maybe 1 G.normalTextureScale materialNormalTexture
-  in Material colorFactor colorTexture normalMap normalMapScale
+  -- TODO Apply metallic roughness factors to metallicRoughnessTexture
+      metallicRoughness =
+        maybe identityTexture ((textures !) . G.textureId)
+          $ G.pbrMetallicRoughnessTexture =<< materialPbrMetallicRoughness
+  in Material colorFactor colorTexture normalMap normalMapScale metallicRoughness
 
 loadMeshPrimitive :: Vector Material -> G.MeshPrimitive -> IO MeshPrimitive
 loadMeshPrimitive materials G.MeshPrimitive{..} = do
