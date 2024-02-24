@@ -20,6 +20,7 @@ module App (
 ) where
 
 import Control.Monad
+import Control.Monad.Fix
 import Control.Monad.Reader
 import Data.Fixed
 import Data.List (delete, insert)

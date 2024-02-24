@@ -89,6 +89,6 @@ createShadowDepthMapper scene = do
     modelMatrixUniform $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
     -- Draw
     GL.bindVertexArrayObject $= Just meshPrimVao
-    GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedShort
+    GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt
       nullPtr
     GL.bindVertexArrayObject $= Nothing

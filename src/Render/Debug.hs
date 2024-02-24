@@ -75,7 +75,7 @@ createDebugGizmoOverlayer env = do
     GL.textureBinding GL.Texture2D $= Just texture
     -- Draw
     GL.bindVertexArrayObject $= Just meshPrimVao
-    GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedShort
+    GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt
       nullPtr
     GL.bindVertexArrayObject $= Nothing
 

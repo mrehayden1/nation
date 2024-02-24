@@ -210,8 +210,8 @@ loadMeshPrimitive materials G.MeshPrimitive{..} = do
   -- Load indices
   ebo <- GL.genObjectName
   GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-  SV.unsafeWith (V.convert meshPrimitiveIndices) $ \ptr -> do
-    let size = fromIntegral . (* sizeOf (undefined :: Word16)) . length
+  SV.unsafeWith (V.convert meshPrimitiveIndices) $ \(ptr :: Ptr Word32) -> do
+    let size = fromIntegral . (* sizeOf (undefined :: Word32)) . length
                  $ meshPrimitiveIndices
     GL.bufferData GL.ElementArrayBuffer $= (size, ptr, GL.StaticDraw)
   -- Load vertex data

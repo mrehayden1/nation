@@ -107,7 +107,7 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     GL.textureBinding GL.Texture2D $= Just normalMap
     -- Draw
     GL.bindVertexArrayObject $= Just meshPrimVao
-    GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedShort
+    GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt
       nullPtr
     -- Unbind
     GL.bindVertexArrayObject $= Nothing
