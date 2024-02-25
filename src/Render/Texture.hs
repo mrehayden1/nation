@@ -102,8 +102,8 @@ instance GlPixel PixelRGB8 where
 
 instance GlPixel PixelRGBA8 where
   glPixelFormat = GL.RGBA
-  glPixelInternalFormat = GL.SRGBAlpha
-  glPixelSRGBInternalFormat = GL.RGBA'
+  glPixelInternalFormat = GL.RGBA'
+  glPixelSRGBInternalFormat = GL.SRGBAlpha
 
 fromImage :: (Pixel a, GlPixel a) => SRGB
   -> GL.MinificationFilter

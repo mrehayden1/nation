@@ -161,7 +161,6 @@ loadTexture images samplers srgb G.Texture{..} = do
                $ G.samplerMagFilter =<< mSampler
   let image = fromMaybe missingImageData
                 $ G.imageData . (images !) =<< textureSourceId
-  -- TODO Don't linearise every texture
   T.decodeImage srgb minF magF wrapS wrapT image
  where
   toMinFilter :: G.MinFilter -> T.MinificationFilter
