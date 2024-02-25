@@ -4,6 +4,7 @@ module Camera (
   worldUp,
 
   direction,
+  right,
   toViewMatrix
 ) where
 
@@ -36,11 +37,14 @@ direction Camera{..} =
       z = negate $ sin camYaw * cos camPitch
   in L.normalize $ L.V3 x y z
 
+right :: Floating a => Camera a -> L.V3 a
+right Camera{..} = L.V3 (sin camYaw) 0 (cos camYaw)
+
 toViewMatrix :: (Floating a, L.Epsilon a) => Camera a -> L.M44 a
 toViewMatrix cam@Camera{..} =
   let dir    = direction cam
       -- the 'centre' to which the camera is looking
       centre = camPos + dir
-      right = L.V3 (sin camYaw) 0 (cos camYaw)
-      up     = right `L.cross` dir -- camera's up
+      -- no camera roll so the camera is always on the x-z plane
+      up     = right cam `L.cross` dir -- camera's up
   in L.lookAt camPos centre up

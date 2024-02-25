@@ -18,6 +18,8 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Linear as L
 import Linear (Epsilon(..), V3(..), V4(..), M44)
 
+import qualified Vector as V
+
 -- Calculate the projection needed to build a depth map for directional light
 directionalLightProjection :: (Epsilon a, Floating a) => M44 a
 directionalLightProjection = L.ortho (-10) 10 (-10) 10 10 (-10)
@@ -26,7 +28,7 @@ directionalLightProjection = L.ortho (-10) 10 (-10) 10 10 (-10)
 type DirectionalLight a = Floating a => V3 a
 
 directionalLightProjection :: (Epsilon a, Floating a) => Camera a -> DirectionalLight a -> M44 a
-directionalLightProjection camera lightDirection = 
+directionalLightProjection camera lightDirection =
   let cameraView = Cam.toViewMatrix camera
       cameraProjection = perspectiveProjection
       cameraInverseViewProjection = L.inv44 $ cameraProjection !*! cameraView
@@ -49,12 +51,18 @@ directionalLightProjection camera lightDirection =
 
 -- Light direction points towards the (infinitely far away) light source
 directionalLightViewMatrix :: (Epsilon a, Floating a)
-  => V3 a
-  -> V3 a
+  => a
+  -> a
   -> M44 a
-directionalLightViewMatrix direction =
-  -- TODO Shouldn't the centre be the centre of the camera view?
-  L.lookAt (negate direction) (V3 0 0 0)
+directionalLightViewMatrix pitch yaw =
+  -- TODO Make a function of the camera view
+  let dir    = V.direction pitch yaw
+      -- the 'centre' to which the camera is looking
+      centre = V3 0 0 0
+      -- no camera roll so the camera is always on the x-z plane
+      right  = L.V3 (sin yaw) 0 (cos yaw)
+      up     = right `L.cross` dir -- camera's up
+  in L.lookAt (negate dir) centre up
 
 perspectiveProjection :: Floating a => a -> a -> a -> M44 a
 perspectiveProjection near far aspectRatio =
@@ -102,7 +110,7 @@ rotateZ t =
 
 -- unpack in row major order
 unpack :: (Foldable t1, Foldable t2) => t1 (t2 a) -> [a]
-unpack = concatMap toList . toList 
+unpack = concatMap toList . toList
 
 -- unpacks nested vectors in row major order into a new GLmatrix
 toGlMatrix :: (GL.MatrixComponent a, Foldable t1, Foldable t2)

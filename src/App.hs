@@ -11,6 +11,7 @@ module App (
 
   Output(..),
   WorldState(..),
+  Sun(..),
 
   PlayerPosition,
   PosX,
@@ -74,9 +75,15 @@ data Output = Output {
   worldState :: WorldState
 }
 
+data Sun = Sun {
+  sunPitch :: Float,
+  sunYaw :: Float
+}
+
 data WorldState = WorldState {
   daylightAmbientIntensity :: Float,
-  daylightDirection :: L.V3 Float,
+  -- | Pointing at the sun
+  sun :: Sun,
   camera :: Camera Float,
   playerPosition :: PlayerPosition
 }
@@ -132,18 +139,13 @@ game eInput = do
   debugCam <- debugCamera delta playerCamera debugCameraOn heldKeys cursor
   let camera = debugCameraOn >>= \d -> if d then debugCam else playerCamera
       ambientLight = pure 0.1
-  sunPitch <- foldDyn (uncurry updateLightDirection) (pi / 2) . updated
+  sunPitch <- foldDyn (uncurry updateSunPitch) (pi / 2) . updated
     $ (,) <$> delta <*> heldKeys
-  let sunDirection = fmap lightDirection sunPitch
-      worldState = WorldState
+  let worldState = WorldState
         <$> ambientLight
-        <*> sunDirection
+        <*> (Sun <$> sunPitch <*> pure (pi / 8))
         <*> camera
         <*> playerPosition
-  {-
-      sunDirection = lightDirection $ (3 * pi) / 4
-      worldState = WorldState <$> camera <*> pure ambientLight <*> pure sunDirection
-  -}
   let output = Output
         <$> shouldExit
         <*> overlayQuad
@@ -154,7 +156,7 @@ game eInput = do
   -- produced until there has been an actual input.
   input <- holdDyn undefined eInput
   return $ (,) <$> input <*> output
- where 
+ where
   updateHeldKeys :: GLFW.Key -> GLFW.KeyState -> GLFW.ModifierKeys -> [GLFW.Key] -> [GLFW.Key]
   updateHeldKeys k GLFW.KeyState'Pressed  _ ks = insert k ks
   updateHeldKeys k GLFW.KeyState'Released _ ks = delete k ks
@@ -170,23 +172,12 @@ game eInput = do
          camYaw = pi / 2
        }
 
-  lightDirection :: (L.Epsilon a, Floating a) => a -> L.V3 a
-  lightDirection pitch = 
-    let yaw = pi / 8
-        lx = cos yaw * cos pitch
-        ly = sin pitch
-        lz = sin yaw * cos pitch
-    in L.normalize $ L.V3 lx ly lz
-
-  updateLightDirection :: DeltaT -> HeldKeys -> Float -> Float
-  updateLightDirection dt keys direction = (+ direction) . sum
-    . fmap keyChange $ keys
-
+  updateSunPitch :: DeltaT -> HeldKeys -> Float -> Float
+  updateSunPitch dt keys pitch = (+ pitch) . sum . fmap keyChange $ keys
    where
     keyChange GLFW.Key'Equal = angularVelocity * realToFrac dt
     keyChange GLFW.Key'Minus = negate angularVelocity * realToFrac dt
     keyChange _              = 0
-
     -- Radians per second
     angularVelocity = 1
 
@@ -234,9 +225,8 @@ game eInput = do
       -> (CursorPosition, Camera a)
       -> (CursorPosition, Camera a)
     updateDebugCamera deltaT keys (x', y') ((x, y), camera@Camera{..}) =
-      let direction = Cam.direction camera
-          velocity = pure debugCameraSpeed * realToFrac deltaT
-                       * (sum . map (keyVelocity direction Cam.worldUp) $ keys)
+      let velocity = pure debugCameraSpeed * realToFrac deltaT
+                       * (sum . map keyVelocity $ keys)
           position = camPos + velocity
           -- Delta pitch and yaw are the negation of the change in cursor
           -- position according to the GLFW window.
@@ -255,12 +245,9 @@ game eInput = do
       -- TODO Move this somewhere easier to find
       cameraMouseSensitivity = 0.0015
 
-      keyVelocity :: L.V3 a
-        -> L.V3 a
-        -> GLFW.Key
-        -> L.V3 a
-      keyVelocity direction  _  GLFW.Key'W = L.normalize direction
-      keyVelocity direction  up GLFW.Key'A = L.normalize . L.cross up $ direction
-      keyVelocity direction  _  GLFW.Key'S = negate . L.normalize $ direction
-      keyVelocity direction  up GLFW.Key'D = L.normalize . L.cross direction $ up
-      keyVelocity _          _  _          = L.V3 0 0 0
+      keyVelocity :: GLFW.Key -> L.V3 a
+      keyVelocity GLFW.Key'W = Cam.direction camera
+      keyVelocity GLFW.Key'A = negate . Cam.right $ camera
+      keyVelocity GLFW.Key'S = negate . Cam.direction $ camera
+      keyVelocity GLFW.Key'D = Cam.right camera
+      keyVelocity _          = L.V3 0 0 0

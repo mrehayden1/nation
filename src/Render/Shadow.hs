@@ -8,7 +8,6 @@ import qualified Graphics.Rendering.OpenGL as GL
 import Linear as L
 
 import App
-import Camera as Cam
 import Render.Matrix as M
 import Render.Model
 import Render.Pipeline
@@ -65,8 +64,8 @@ createShadowDepthMapper scene = do
     let projectionUniform = pipelineUniform pipeline "projectionM"
     projectionUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set view matrix
-    viewMatrix <- M.toGlMatrix
-      . directionalLightViewMatrix daylightDirection $ Cam.worldUp
+    viewMatrix <- M.toGlMatrix . directionalLightViewMatrix (sunPitch sun)
+      . sunYaw $ sun
     let viewUniform = pipelineUniform pipeline "viewM"
     viewUniform $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set model matrix

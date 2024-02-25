@@ -57,15 +57,16 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     lightProjectionUniform $= (lightProjection :: GL.GLmatrix GL.GLfloat)
     -- Set light view matrix
     let lightViewUniform = pipelineUniform pipeline "lightViewM"
-    lightView <- M.toGlMatrix . M.directionalLightViewMatrix daylightDirection
-                   $ Cam.worldUp
+    lightView <- M.toGlMatrix . M.directionalLightViewMatrix (sunPitch sun)
+                   . sunYaw $ sun
     lightViewUniform $= (lightView :: GL.GLmatrix GL.GLfloat)
     -- Set ambient intensity
     let ambientIntensityUniform = pipelineUniform pipeline "ambientIntensity"
     ambientIntensityUniform $= daylightAmbientIntensity
     -- Set light direction
     let lightDirectionUniform = pipelineUniform pipeline "lightDirection"
-    lightDirectionUniform $= V.toGlVector3 daylightDirection
+    lightDirectionUniform $=
+      (V.toGlVector3 . V.direction (sunPitch sun) . sunYaw $ sun)
     -- Set camera position
     let camPosUniform = pipelineUniform pipeline "camPos"
     camPosUniform $= (V.toGlVector3 . camPos $ camera)
