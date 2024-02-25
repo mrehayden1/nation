@@ -104,7 +104,6 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     let alphaModeUniform = pipelineUniform pipeline "alphaMode"
     alphaModeUniform
       $= (fromIntegral . fromEnum $ materialAlphaMode :: GL.GLint)
-
     -- Set metallic/roughness texture
     let metallicRoughnessTexture = materialMetallicRoughnessTexture
     GL.activeTexture $= GL.TextureUnit metallicRoughnessTextureUnit
@@ -120,4 +119,8 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     -- Unbind
     GL.bindVertexArrayObject $= Nothing
     GL.activeTexture $= GL.TextureUnit albedoTextureUnit
+    GL.textureBinding GL.Texture2D $= Nothing
+    GL.activeTexture $= GL.TextureUnit metallicRoughnessTextureUnit
+    GL.textureBinding GL.Texture2D $= Nothing
+    GL.activeTexture $= GL.TextureUnit normalMapTextureUnit
     GL.textureBinding GL.Texture2D $= Nothing
