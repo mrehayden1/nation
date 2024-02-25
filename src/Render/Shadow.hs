@@ -17,6 +17,9 @@ depthMapWidth = 2048
 depthMapHeight = 2048
 depthMapTextureImageLevel = 0
 
+albedoTextureUnit :: Integral a => a
+albedoTextureUnit = 0
+
 -- Create a texture object and a callback that renders the shadow depth map
 -- from the perspective of out light source to the texture.
 createShadowDepthMapper :: [Model]
@@ -82,12 +85,27 @@ createShadowDepthMapper scene = do
 
   renderMeshPrimitive :: Pipeline -> M44 Float -> MeshPrimitive -> IO ()
   renderMeshPrimitive pipeline modelMatrix' MeshPrimitive{..} = do
+    let Material{..} = meshPrimMaterial
     -- Set model matrix
     modelMatrix <- M.toGlMatrix modelMatrix'
     let modelMatrixUniform = pipelineUniform pipeline "modelM"
     modelMatrixUniform $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
+    -- Set albedo textures (for alpha testing)
+    let albedoTexture = materialBaseColorTexture
+    GL.activeTexture $= GL.TextureUnit albedoTextureUnit
+    GL.textureBinding GL.Texture2D $= Just albedoTexture
+    -- Alpha
+    let alphaCutoffUniform = pipelineUniform pipeline "alphaCutoff"
+    alphaCutoffUniform $= materialAlphaCutoff
+    let alphaModeUniform = pipelineUniform pipeline "alphaMode"
+    alphaModeUniform
+      $= (fromIntegral . fromEnum $ materialAlphaMode :: GL.GLint)
     -- Draw
     GL.bindVertexArrayObject $= Just meshPrimVao
     GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt
       nullPtr
     GL.bindVertexArrayObject $= Nothing
+    -- Unbind
+    GL.bindVertexArrayObject $= Nothing
+    GL.activeTexture $= GL.TextureUnit albedoTextureUnit
+    GL.textureBinding GL.Texture2D $= Nothing

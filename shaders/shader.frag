@@ -12,10 +12,16 @@ layout (binding = 1) uniform sampler2D albedoTexture;
 layout (binding = 2) uniform sampler2D metallicRoughnessTexture;
 layout (binding = 3) uniform sampler2D normalMap;
 
+uniform int alphaMode;
+uniform float alphaCutoff;
 uniform float ambientIntensity;
 uniform vec3 camPos;
 uniform vec3 lightDirection;
 uniform mat4 viewM;
+
+const int ALPHA_MODE_BLEND = 0;
+const int ALPHA_MODE_MASK = 1;
+const int ALPHA_MODE_OPAQUE = 2;
 
 const float PI = 3.14159265359;
 
@@ -95,7 +101,14 @@ void main()
 {
   vec3 lightColour = vec3(1.0f, 1.0f, 1.0f);
 
-  vec3 albedo = texture(albedoTexture, TexCoords).rgb;
+  vec4 albedoRgba = texture(albedoTexture, TexCoords).rgba;
+  float alpha = albedoRgba.a;
+  vec3 albedo = albedoRgba.rgb;
+
+  // Alpha cut-off
+  if (alphaMode == ALPHA_MODE_MASK && alpha < alphaCutoff)
+    discard;
+
   vec3 metallicRoughness = texture(metallicRoughnessTexture, TexCoords).rgb;
   float roughness = metallicRoughness.g;
   float metallic = metallicRoughness.b;

@@ -83,6 +83,7 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
 
   renderMeshPrimitive :: Pipeline -> M44 Float -> MeshPrimitive -> IO ()
   renderMeshPrimitive pipeline modelMatrix MeshPrimitive{..} = do
+    let Material{..} = meshPrimMaterial
     -- Set model matrix
     modelMatrix' <- M.toGlMatrix modelMatrix
     let modelMatrixUniform = pipelineUniform pipeline "modelM"
@@ -94,16 +95,22 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     normalMatrix <- M.toGlMatrix . L.m33_to_m44 $ transposeInverseModelMatrix
     normalMatrixUniform $= (normalMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set albedo textures
-    let albedoTexture = materialBaseColorTexture meshPrimMaterial
+    let albedoTexture = materialBaseColorTexture
     GL.activeTexture $= GL.TextureUnit albedoTextureUnit
     GL.textureBinding GL.Texture2D $= Just albedoTexture
+    -- Alpha
+    let alphaCutoffUniform = pipelineUniform pipeline "alphaCutoff"
+    alphaCutoffUniform $= materialAlphaCutoff
+    let alphaModeUniform = pipelineUniform pipeline "alphaMode"
+    alphaModeUniform
+      $= (fromIntegral . fromEnum $ materialAlphaMode :: GL.GLint)
+
     -- Set metallic/roughness texture
     let metallicRoughnessTexture = materialMetallicRoughnessTexture
-          meshPrimMaterial
     GL.activeTexture $= GL.TextureUnit metallicRoughnessTextureUnit
     GL.textureBinding GL.Texture2D $= Just metallicRoughnessTexture
     -- Set normal map
-    let normalMap = materialNormalMap meshPrimMaterial
+    let normalMap = materialNormalMap
     GL.activeTexture $= GL.TextureUnit normalMapTextureUnit
     GL.textureBinding GL.Texture2D $= Just normalMap
     -- Draw

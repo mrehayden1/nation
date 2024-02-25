@@ -3,6 +3,7 @@ module Render.Model (
   SceneNode(..),
   MeshPrimitive(..),
   Material(..),
+  G.MaterialAlphaMode(..),
 
   traverseModel_,
 
@@ -54,6 +55,8 @@ data MeshPrimitive = MeshPrimitive {
 }
 
 data Material = Material {
+  materialAlphaMode :: G.MaterialAlphaMode,
+  materialAlphaCutoff :: Float,
   materialBaseColorFactor :: V4 Float,
   materialBaseColorTexture :: GL.TextureObject,
   materialNormalMap :: GL.TextureObject,
@@ -139,6 +142,8 @@ defaultNormalMap =
 
 defaultMaterial :: Material
 defaultMaterial = Material {
+    materialAlphaCutoff = 0.5,
+    materialAlphaMode = G.Opaque,
     materialBaseColorFactor = defaultBaseColorFactor,
     materialBaseColorTexture = identityTexture,
     materialNormalMap = defaultNormalMap,
@@ -196,10 +201,18 @@ loadMaterial textures G.Material{..} =
                     materialNormalTexture
       normalMapScale = maybe 1 G.normalTextureScale materialNormalTexture
   -- TODO Apply metallic roughness factors to metallicRoughnessTexture
-      metallicRoughness =
+      metallicRoughnessTexture =
         maybe identityTexture ((textures !) . G.textureId)
           $ G.pbrMetallicRoughnessTexture =<< materialPbrMetallicRoughness
-  in Material colorFactor colorTexture normalMap normalMapScale metallicRoughness
+  in Material {
+       materialAlphaCutoff = materialAlphaCutoff,
+       materialAlphaMode = materialAlphaMode,
+       materialBaseColorFactor = colorFactor,
+       materialBaseColorTexture = colorTexture,
+       materialNormalMap = normalMap,
+       materialNormalMapScale = normalMapScale,
+       materialMetallicRoughnessTexture = metallicRoughnessTexture
+    }
 
 loadMeshPrimitive :: Vector Material -> G.MeshPrimitive -> IO MeshPrimitive
 loadMeshPrimitive materials G.MeshPrimitive{..} = do
