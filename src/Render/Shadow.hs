@@ -80,7 +80,7 @@ createShadowDepthMapper scene = do
         GL.Size depthMapWidth depthMapHeight
       )
     GL.clear [GL.DepthBuffer]
-    mapM_ (traverseModel_ (renderMeshPrimitive pipeline)) scene
+    mapM_ (withRenderer (renderMeshPrimitive pipeline)) scene
     GL.bindFramebuffer GL.Framebuffer $= GL.defaultFramebufferObject -- unbind
 
   renderMeshPrimitive :: Pipeline -> M44 Float -> MeshPrimitive -> IO ()

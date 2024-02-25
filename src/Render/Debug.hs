@@ -59,7 +59,7 @@ createDebugGizmoOverlayer env = do
       . windowAspectRatio $ env
     projectionMUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     GL.clear [GL.DepthBuffer]
-    traverseModel_ (renderMeshPrimitive pipeline) model
+    withRenderer (renderMeshPrimitive pipeline) model
     unbindPipeline
     return ()
  where

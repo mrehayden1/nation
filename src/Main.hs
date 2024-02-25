@@ -18,6 +18,7 @@ import Reflex.Network
 
 import App
 import Render.Debug
+import qualified Render.Matrix as M
 import Render.Model
 import Render.Scene
 import Render.Shadow
@@ -46,10 +47,16 @@ main = do
     -- Used to get the time the frame was last refreshed
     timeRef <- newIORef 0
     -- Create graphics elements
-    model <- fromGlbFile "assets/models/monument.glb"
+    grass <- fromGlbFile "assets/models/grass-tile.glb"
+    fauna <- fromGlbFile "assets/models/fauna.glb"
+    --model <- fromGlbFile "assets/models/oven.glb"
+    --monument <- fromGlbFile "assets/models/monument.glb"
     --model <- fromGlbFile "assets/models/reference_frame.glb"
     --model <- fromGlbFile "assets/models/horse.glb"
-    let scene = [model]
+    let scene = [ transform (M.translate (x * 15) 0 (z * 15)) fauna
+          | x <- [-1..1], z <- [-1..1]
+          ] ++ [ transform (M.translate (x * 4.5) 0 (z * 4.5)) grass
+               | x <- [-5..5], z <- [-5..5] ]
     -- Create a depth buffer object and depth map texture
     (shadowDepthMapTexture, renderShadowDepthMap)
       <- createShadowDepthMapper scene

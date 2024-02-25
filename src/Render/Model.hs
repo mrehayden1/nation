@@ -5,7 +5,9 @@ module Render.Model (
   Material(..),
   G.MaterialAlphaMode(..),
 
-  traverseModel_,
+  transform,
+
+  withRenderer,
 
   fromGlbFile,
 
@@ -35,14 +37,14 @@ import qualified Text.GLTF.Loader as G
 import Render.Matrix as M
 import qualified Render.Texture as T
 
-type Model = [Tree SceneNode]
+type Model = Tree SceneNode
 
 type Mesh = Vector MeshPrimitive
 
 -- TODO Increase strictness so all data loads ahead of render.
 data SceneNode = SceneNode {
-  nodeMesh :: Maybe Mesh,
-  nodeMatrix :: L.M44 Float
+  nodeMatrix :: L.M44 Float,
+  nodeMesh :: Maybe Mesh
 }
 
 data MeshPrimitive = MeshPrimitive {
@@ -59,19 +61,30 @@ data Material = Material {
   materialAlphaCutoff :: Float,
   materialBaseColorFactor :: V4 Float,
   materialBaseColorTexture :: GL.TextureObject,
+  materialDoubleSided :: Bool,
   materialNormalMap :: GL.TextureObject,
   materialNormalMapScale :: Float,
   materialMetallicRoughnessTexture :: GL.TextureObject
 }
 
-traverseModel_ :: Monad m
+transform :: L.M44 Float -> Model -> Model
+transform m (Node s ns) = Node (s { nodeMatrix = m !*! nodeMatrix s }) ns
+
+withRenderer :: Monad m
   => (L.M44 Float -> MeshPrimitive -> m ())
   -> Model
   -> m ()
-traverseModel_ render = mapM_ (traverse_ traverseMesh_)
+withRenderer render = traverse_ traverseMesh_ . accumTransforms L.identity
  where
   traverseMesh_ SceneNode{..} = mapM_ (mapM_ (render nodeMatrix)) nodeMesh
 
+  accumTransforms m (Node s ns) =
+    let SceneNode{..} = s
+        m' = m !*! nodeMatrix
+    in Node (s { nodeMatrix = m' }) . fmap (accumTransforms m') $ ns
+
+-- FIXME - we should fail with an error if there is missing data essential to
+-- rendering. e.g. tangents
 fromGlbFile :: FilePath -> IO Model
 fromGlbFile pathname = do
   eGlb <- G.fromBinaryFile pathname
@@ -86,7 +99,6 @@ fromGlbFile pathname = do
                 $ gltfTextures
   let materials = fmap (loadMaterial textures) gltfMaterials
   meshes <- mapM (mapM (loadMeshPrimitive materials) . G.meshPrimitives) gltfMeshes
-  -- Traverse the scene graph and accumulate the transformations
   let scene = makeSceneGraph gltfScenes gltfNodes meshes
   return scene
  where
@@ -95,24 +107,22 @@ fromGlbFile pathname = do
   makeSceneGraph :: Vector G.Scene
     -> Vector G.Node
     -> Vector Mesh
-    -> [Tree SceneNode]
+    -> Tree SceneNode
   makeSceneGraph scenes nodes meshes =
     let rootIxs = if F.null scenes then mempty else G.sceneNodes $ V.head scenes
-    -- Accumulate the transformations recursively and save them in each node
-    in F.toList . fmap (accumTransformation L.identity . (nodes !)) $ rootIxs
+    in Node (SceneNode L.identity Nothing) . F.toList
+         . fmap (makeNode . (nodes !)) $ rootIxs
    where
-    accumTransformation :: L.M44 Float -> G.Node -> Tree SceneNode
-    accumTransformation m G.Node{..} =
+    makeNode :: G.Node -> Tree SceneNode
+    makeNode G.Node{..} =
       let s = maybe L.identity M.scale nodeScale
           r = maybe L.identity L.fromQuaternion nodeRotation
           t = fromMaybe 0 nodeTranslation
           tr = L.mkTransformationMat r t
           trs = tr !*! s
-          m' = m !*! trs
-          ns = F.toList . fmap (accumTransformation m' . (nodes !))
-                 $ nodeChildren
+          ns = F.toList . fmap (makeNode . (nodes !)) $ nodeChildren
           mesh = fmap (meshes !) nodeMeshId
-      in Node (SceneNode mesh m') ns
+      in Node (SceneNode trs mesh) ns
 
 {-# NOINLINE missingImageData #-}
 missingImageData :: ByteString

@@ -76,7 +76,7 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
         GL.Size (fromIntegral windowWidth) (fromIntegral windowHeight)
       )
     GL.clear [GL.ColorBuffer, GL.DepthBuffer]
-    mapM_ (traverseModel_ (renderMeshPrimitive pipeline)) scene
+    mapM_ (withRenderer (renderMeshPrimitive pipeline)) scene
     -- Unbind textures
     GL.activeTexture $= GL.TextureUnit shadowMapTextureUnit
     GL.textureBinding GL.Texture2D $= Nothing
