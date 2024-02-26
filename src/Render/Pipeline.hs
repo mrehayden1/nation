@@ -12,7 +12,6 @@ module Render.Pipeline (
 import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe
 import Data.StateVar
 import qualified Graphics.Rendering.OpenGL as GL
 
@@ -24,14 +23,14 @@ data Pipeline = Pipeline {
   pipelineUniforms :: Map String GL.UniformLocation
 }
 
--- Partial function, `error`s on failure
 pipelineUniform :: (GL.Uniform a) => Pipeline -> String -> StateVar a
 pipelineUniform pipeline name = do
-  let location = fromMaybe (error errMsg) . Map.lookup name . pipelineUniforms
+  let location = Map.lookup name . pipelineUniforms
                    $ pipeline
-  GL.uniform location
+  maybe noOpStateVar GL.uniform location
  where
-  errMsg = "Uniform \"" ++ name ++ "\" not found."
+  noOpStateVar :: StateVar a
+  noOpStateVar = makeStateVar undefined $ \_ -> return ()
 
 compilePipeline :: [ShaderLocation] -> IO Pipeline
 compilePipeline shaders = do
