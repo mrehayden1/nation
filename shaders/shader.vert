@@ -23,7 +23,7 @@ void main()
 
   mat3 normalM3 = mat3(normalM); // Can't pass mat3 with our OpenGL bindings
   Normal = normalize(normalM3 * aNormal);
-  vec3 Tangent = normalize(normalM3 * vec3(aTangent));
+  vec3 Tangent = normalize(normalM3 * aTangent.xyz);
   vec3 Bitangent = cross(Normal, Tangent) * aTangent.w;
   TBN = mat3(Tangent, Bitangent, Normal);
 

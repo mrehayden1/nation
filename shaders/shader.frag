@@ -16,6 +16,7 @@ uniform int alphaMode;
 uniform float alphaCutoff;
 uniform float ambientIntensity;
 uniform vec3 camPos;
+uniform bool doubleSided;
 uniform vec3 lightDirection;
 uniform mat4 viewM;
 
@@ -113,21 +114,22 @@ void main()
   float roughness = metallicRoughness.g;
   float metallic = metallicRoughness.b;
 
-  vec3 F0 = mix(vec3(0.04), albedo, metallic);
+  vec3 V = normalize(camPos - WorldPos);
+  vec3 L = lightDirection;
+  vec3 H = normalize(V + L);
+  vec3 radiance = lightColour * 1;
 
   // Normal mapping
   vec3 N = texture(normalMap, TexCoords).rgb;
   N = N * 2.0 - 1.0;
   N = normalize(TBN * N);
+  if (doubleSided && dot(N, V) < 0.0)
+    N = -N;
 
-  vec3 V = normalize(camPos - WorldPos);
-  vec3 L = lightDirection;
-  vec3 H = normalize(V + L);
-  vec3 radiance = lightColour * 2;
-
-  // cook-torrance brdf
+  // Cook-Torrance BRDF
   float NDF = DistributionGGX(N, H, roughness);
   float G   = GeometrySmith(N, V, L, roughness);
+  vec3 F0 = mix(vec3(0.04), albedo, metallic);
   vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);
 
   vec3 kS = F;
