@@ -43,33 +43,28 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     GL.activeTexture $= GL.TextureUnit shadowMapTextureUnit
     GL.textureBinding GL.Texture2D $= Just shadowDepthMap
     -- Set view matrix
-    let viewUniform = pipelineUniform pipeline "viewM"
     viewMatrix <- M.toGlMatrix .  Cam.toViewMatrix $ camera
-    viewUniform $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
+    pipelineUniform pipeline "viewM" $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set projection matrix
-    let projectionUniform = pipelineUniform pipeline "projectionM"
     projection <- M.toGlMatrix . M.perspectiveProjection 0.1 100
       . windowAspectRatio $ env
-    projectionUniform $= (projection :: GL.GLmatrix GL.GLfloat)
+    pipelineUniform pipeline "projectionM" $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set light projection matrix
-    let lightProjectionUniform = pipelineUniform pipeline "lightProjectionM"
     lightProjection <- M.toGlMatrix M.directionalLightProjection
-    lightProjectionUniform $= (lightProjection :: GL.GLmatrix GL.GLfloat)
+    pipelineUniform pipeline "lightProjectionM"
+      $= (lightProjection :: GL.GLmatrix GL.GLfloat)
     -- Set light view matrix
-    let lightViewUniform = pipelineUniform pipeline "lightViewM"
     lightView <- M.toGlMatrix . M.directionalLightViewMatrix (sunPitch sun)
                    . sunYaw $ sun
-    lightViewUniform $= (lightView :: GL.GLmatrix GL.GLfloat)
+    pipelineUniform pipeline "lightViewM"
+      $= (lightView :: GL.GLmatrix GL.GLfloat)
     -- Set ambient intensity
-    let ambientIntensityUniform = pipelineUniform pipeline "ambientIntensity"
-    ambientIntensityUniform $= daylightAmbientIntensity
+    pipelineUniform pipeline "ambientIntensity" $= daylightAmbientIntensity
     -- Set light direction
-    let lightDirectionUniform = pipelineUniform pipeline "lightDirection"
-    lightDirectionUniform $=
+    pipelineUniform pipeline "lightDirection" $=
       (V.toGlVector3 . V.direction (sunPitch sun) . sunYaw $ sun)
     -- Set camera position
-    let camPosUniform = pipelineUniform pipeline "camPos"
-    camPosUniform $= (V.toGlVector3 . camPos $ camera)
+    pipelineUniform pipeline "camPos" $= (V.toGlVector3 . camPos $ camera)
     -- Render
     GL.viewport $= (
         GL.Position 0 0,
@@ -86,37 +81,31 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     let Material{..} = meshPrimMaterial
     -- Textures
     -- Set albedo textures
-    let albedoTexture = materialBaseColorTexture
     GL.activeTexture $= GL.TextureUnit albedoTextureUnit
-    GL.textureBinding GL.Texture2D $= Just albedoTexture
+    GL.textureBinding GL.Texture2D $= Just materialBaseColorTexture
     -- Set metallic/roughness texture
-    let metallicRoughnessTexture = materialMetallicRoughnessTexture
     GL.activeTexture $= GL.TextureUnit metallicRoughnessTextureUnit
-    GL.textureBinding GL.Texture2D $= Just metallicRoughnessTexture
+    GL.textureBinding GL.Texture2D $= Just materialMetallicRoughnessTexture
     -- Set normal map
-    let normalMap = materialNormalMap
     GL.activeTexture $= GL.TextureUnit normalMapTextureUnit
-    GL.textureBinding GL.Texture2D $= Just normalMap
+    GL.textureBinding GL.Texture2D $= Just materialNormalMap
     -- Uniforms
     -- Alpha coverage
-    let alphaCutoffUniform = pipelineUniform pipeline "alphaCutoff"
-    alphaCutoffUniform $= materialAlphaCutoff
-    let alphaModeUniform = pipelineUniform pipeline "alphaMode"
-    alphaModeUniform
+    pipelineUniform pipeline "alphaCutoff" $= materialAlphaCutoff
+    pipelineUniform pipeline "alphaMode"
       $= (fromIntegral . fromEnum $ materialAlphaMode :: GL.GLint)
     -- Double-sidedness
     pipelineUniform pipeline "doubleSided"
       $= (fromIntegral . fromEnum $ materialDoubleSided :: GL.GLint)
     -- Set model matrix
     modelMatrix' <- M.toGlMatrix modelMatrix
-    let modelMatrixUniform = pipelineUniform pipeline "modelM"
-    modelMatrixUniform $= (modelMatrix' :: GL.GLmatrix GL.GLfloat)
+    pipelineUniform pipeline "modelM"
+      $= (modelMatrix' :: GL.GLmatrix GL.GLfloat)
     -- Set normal matrix
-    let normalMatrixUniform = pipelineUniform pipeline "normalM"
-    let transposeInverseModelMatrix = (^. L._m33) . L.transpose . L.inv44
-          $ modelMatrix
-    normalMatrix <- M.toGlMatrix . L.m33_to_m44 $ transposeInverseModelMatrix
-    normalMatrixUniform $= (normalMatrix :: GL.GLmatrix GL.GLfloat)
+    normalMatrix <- M.toGlMatrix . L.m33_to_m44 . (^. L._m33) . L.transpose
+      . L.inv44 $ modelMatrix
+    pipelineUniform pipeline "normalM"
+      $= (normalMatrix :: GL.GLmatrix GL.GLfloat)
     -- Draw
     GL.bindVertexArrayObject $= Just meshPrimVao
     GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt

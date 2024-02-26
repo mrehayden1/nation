@@ -64,17 +64,15 @@ createShadowDepthMapper scene = do
     GL.bindFramebuffer GL.Framebuffer $= frameBuffer
     -- Set projection matrix
     projection <- M.toGlMatrix directionalLightProjection
-    let projectionUniform = pipelineUniform pipeline "projectionM"
-    projectionUniform $= (projection :: GL.GLmatrix GL.GLfloat)
+    pipelineUniform pipeline "projectionM"
+      $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set view matrix
     viewMatrix <- M.toGlMatrix . directionalLightViewMatrix (sunPitch sun)
       . sunYaw $ sun
-    let viewUniform = pipelineUniform pipeline "viewM"
-    viewUniform $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
+    pipelineUniform pipeline "viewM" $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set model matrix
     model <- M.toGlMatrix (L.identity :: L.M44 GL.GLfloat)
-    let modelUniform = pipelineUniform pipeline "modelM"
-    modelUniform $= (model :: GL.GLmatrix GL.GLfloat)
+    pipelineUniform pipeline "modelM" $= (model :: GL.GLmatrix GL.GLfloat)
     GL.viewport $= (
         GL.Position 0 0,
         GL.Size depthMapWidth depthMapHeight
@@ -88,17 +86,14 @@ createShadowDepthMapper scene = do
     let Material{..} = meshPrimMaterial
     -- Set model matrix
     modelMatrix <- M.toGlMatrix modelMatrix'
-    let modelMatrixUniform = pipelineUniform pipeline "modelM"
-    modelMatrixUniform $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
+    pipelineUniform pipeline "modelM"
+      $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set albedo textures (for alpha testing)
-    let albedoTexture = materialBaseColorTexture
     GL.activeTexture $= GL.TextureUnit albedoTextureUnit
-    GL.textureBinding GL.Texture2D $= Just albedoTexture
+    GL.textureBinding GL.Texture2D $= Just materialBaseColorTexture
     -- Alpha
-    let alphaCutoffUniform = pipelineUniform pipeline "alphaCutoff"
-    alphaCutoffUniform $= materialAlphaCutoff
-    let alphaModeUniform = pipelineUniform pipeline "alphaMode"
-    alphaModeUniform
+    pipelineUniform pipeline "alphaCutoff" $= materialAlphaCutoff
+    pipelineUniform pipeline "alphaMode"
       $= (fromIntegral . fromEnum $ materialAlphaMode :: GL.GLint)
     -- Draw
     GL.bindVertexArrayObject $= Just meshPrimVao
