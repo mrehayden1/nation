@@ -33,6 +33,7 @@ import qualified Linear as L
 import System.IO.Unsafe
 import Text.GLTF.Loader (Gltf(..))
 import qualified Text.GLTF.Loader as G
+import Text.Printf
 
 import Render.Matrix as M
 import qualified Render.Texture as T
@@ -87,6 +88,7 @@ withRenderer render = traverse_ traverseMesh_ . accumTransforms L.identity
 -- rendering. e.g. tangents
 fromGlbFile :: FilePath -> IO Model
 fromGlbFile pathname = do
+  printf "Loading model \"%s\"...\n" pathname
   eGlb <- G.fromBinaryFile pathname
   gltf <- case eGlb of
     Left  _ -> fail "loadModel: Failed to read GLB."
@@ -228,6 +230,15 @@ loadMaterial textures G.Material{..} =
 
 loadMeshPrimitive :: Vector Material -> G.MeshPrimitive -> IO MeshPrimitive
 loadMeshPrimitive materials G.MeshPrimitive{..} = do
+  -- Do some checks
+  when (null meshPrimitiveIndices) . error
+    $ "Mesh primitives are required to be indexed."
+  when (null meshPrimitiveNormals) . error
+    $ "Mesh primitive missing normals."
+  when (null meshPrimitiveTangents) . error
+    $ "Mesh primitive missing tangents."
+  when (null meshPrimitiveTexCoords) . error
+    $ "Mesh primitive missing texture co-ordinates."
   -- Create and bind VAO
   vao <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vao
