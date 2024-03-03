@@ -52,7 +52,7 @@ createDebugGizmoOverlayer env = do
     modelMUniform $= modelM
     let cameraViewM = Cam.toViewMatrix camera :: L.M44 GL.GLfloat
     -- Make the view matrix translation fixed so the gizmo is always in view.
-    viewM <- M.toGlMatrix . (M.translate 0 0 (-100) !*!)
+    viewM <- M.toGlMatrix . (M.translate (L.V3 0 0 (-100)) !*!)
                . set L.translation 0 $ cameraViewM
     viewMUniform $= viewM
     projection <- M.toGlMatrix . M.perspectiveProjection 0.1 1000

@@ -3,6 +3,7 @@ module Main (
 ) where
 
 import Control.Exception
+import Control.Lens
 import Control.Monad
 import Control.Monad.Reader
 import Data.IORef
@@ -11,6 +12,7 @@ import Data.StateVar
 import Data.Time.Clock.POSIX
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
+import Linear
 import Reflex
 import Reflex.GLFW.Simple
 import Reflex.Host.Headless
@@ -18,7 +20,6 @@ import Reflex.Network
 
 import App
 import Render.Debug
-import qualified Render.Matrix as M
 import Render.Model
 import Render.Scene
 import Render.Shadow
@@ -47,15 +48,19 @@ main = do
     -- Used to get the time the frame was last refreshed
     timeRef <- newIORef 0
     -- Create graphics elements
-    --model <- fromGlbFile "assets/models/oven.glb"
-    --monument <- fromGlbFile "assets/models/monument.glb"
-    --model <- fromGlbFile "assets/models/horse.glb"
+    monument <- fromGlbFile "assets/models/monument.glb"
+    horse <- fromGlbFile "assets/models/horse.glb"
     grass <- fromGlbFile "assets/models/grass-tile.glb"
     fauna <- fromGlbFile "assets/models/fauna.glb"
-    let scene = [ transform (M.translate (x * 15) 0 (z * 15)) fauna
-          | x <- [-1..1], z <- [-1..1]
-          ] ++ [ transform (M.translate (x * 4.5) 0 (z * 4.5)) grass
-               | x <- [-5..5], z <- [-5..5] ]
+    let scene = set modelTranslation (V3 4 0 4) horse
+          : set modelTranslation (V3 (-3) 0 (-3)) monument
+          : [
+            set modelTranslation (V3 (x * 16) 0 (z * 16)) fauna |
+            x <- [-1..1], z <- [-1..1]
+          ] ++ [
+            set modelTranslation (V3 (x * 4.5) 0 (z * 4.5)) grass |
+            x <- [-5..5], z <- [-5..5]
+          ]
     -- Create a depth buffer object and depth map texture
     (shadowDepthMapTexture, renderShadowDepthMap)
       <- createShadowDepthMapper scene
@@ -127,7 +132,7 @@ initialise = do
     putStrLn "Console debugging enabled"
     GLFW.windowHint (GLFW.WindowHint'OpenGLDebugContext True)
   _ <- GLFW.init
-  -- Hint MSAA
+  -- MSAA
   unless (multisampleSubsamples == MsaaNone) $
     GLFW.windowHint . GLFW.WindowHint'Samples . Just . round
       . ((2 :: Float) ^^) . fromEnum $ multisampleSubsamples

@@ -75,8 +75,8 @@ scale (V3 x y z) = V4 (V4 x 0 0 0)
                       (V4 0 0 z 0)
                       (V4 0 0 0 1)
 
-translate :: Num a => a -> a -> a -> M44 a
-translate x y z =
+translate :: Num a => V3 a -> M44 a
+translate (V3 x y z) =
   V4
     (V4 1 0 0 x)
     (V4 0 1 0 y)

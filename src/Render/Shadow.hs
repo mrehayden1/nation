@@ -2,6 +2,7 @@ module Render.Shadow (
   createShadowDepthMapper
 ) where
 
+import Data.Fixed
 import Data.StateVar
 import Foreign.Ptr
 import qualified Graphics.Rendering.OpenGL as GL
@@ -78,7 +79,7 @@ createShadowDepthMapper scene = do
         GL.Size depthMapWidth depthMapHeight
       )
     GL.clear [GL.DepthBuffer]
-    mapM_ (withRenderer (renderMeshPrimitive pipeline)) scene
+    mapM_ (withRendererPosed (renderMeshPrimitive pipeline) (Just ("Walk", animationTime `mod'` 1))) scene
     GL.bindFramebuffer GL.Framebuffer $= GL.defaultFramebufferObject -- unbind
 
   renderMeshPrimitive :: Pipeline -> M44 Float -> MeshPrimitive -> IO ()

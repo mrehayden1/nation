@@ -32,6 +32,10 @@ executable nation
       Render.Element
       Render.Matrix
       Render.Model
+      Render.Model.GLTF
+      Render.Model.GLTF.Material
+      Render.Model.GLTF.Texture
+      Render.Model.Model
       Render.Pipeline
       Render.Scene
       Render.Shaders
@@ -54,6 +58,7 @@ executable nation
       RecordWildCards
       RecursiveDo
       ScopedTypeVariables
+      TemplateHaskell
       TupleSections
       TypeApplications
       TypeFamilies
@@ -78,6 +83,7 @@ executable nation
     , ref-tf
     , reflex
     , reflex-glfw-simple
+    , text
     , time
     , vector
   default-language: Haskell2010

@@ -1,301 +1,94 @@
 module Render.Model (
-  Model,
+  module Render.Model.Model,
+  module Render.Model.GLTF,
+
   SceneNode(..),
   MeshPrimitive(..),
   Material(..),
   G.MaterialAlphaMode(..),
 
-  transform,
-
   withRenderer,
-
-  fromGlbFile,
+  withRendererPosed,
 
   deleteModel
 ) where
 
-import Control.Monad
-import Codec.Picture
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
+import Control.Lens hiding (transform)
 import Data.Foldable as F
+import qualified Data.Map as M
 import Data.Maybe
-import Data.StateVar
+import Data.Text (Text)
 import Data.Tree
-import Data.Vector (Vector, (!))
+import Data.Vector (Vector)
 import qualified Data.Vector as V
-import qualified Data.Vector.Storable as SV
-import Data.Word
-import Foreign
-import qualified Graphics.Rendering.OpenGL as GL
-import Linear (V4(..), (!*!))
+import Linear ((!*!))
 import qualified Linear as L
-import System.IO.Unsafe
-import Text.GLTF.Loader (Gltf(..))
 import qualified Text.GLTF.Loader as G
-import Text.Printf
 
 import Render.Matrix as M
-import qualified Render.Texture as T
+import Render.Model.Model
+import Render.Model.GLTF
 
-type Model = Tree SceneNode
-
-type Mesh = Vector MeshPrimitive
-
--- TODO Increase strictness so all data loads ahead of render.
-data SceneNode = SceneNode {
-  nodeMatrix :: L.M44 Float,
-  nodeMesh :: Maybe Mesh
-}
-
-data MeshPrimitive = MeshPrimitive {
-  meshPrimMaterial :: Material,
-  meshPrimGlMode :: GL.PrimitiveMode,
-  meshPrimVao :: GL.VertexArrayObject,
-  meshPrimVbo :: [GL.BufferObject],
-  meshPrimEbo :: GL.BufferObject,
-  meshPrimNumIndices :: GL.NumArrayIndices
-}
-
-data Material = Material {
-  materialAlphaMode :: G.MaterialAlphaMode,
-  materialAlphaCutoff :: Float,
-  materialBaseColorFactor :: V4 Float,
-  materialBaseColorTexture :: GL.TextureObject,
-  materialDoubleSided :: Bool,
-  materialNormalMap :: GL.TextureObject,
-  materialNormalMapScale :: Float,
-  materialMetallicRoughnessTexture :: GL.TextureObject
-}
-
-transform :: L.M44 Float -> Model -> Model
-transform m (Node s ns) = Node (s { nodeMatrix = m !*! nodeMatrix s }) ns
-
-withRenderer :: Monad m
+withRenderer :: forall m. Monad m
   => (L.M44 Float -> MeshPrimitive -> m ())
   -> Model
   -> m ()
-withRenderer render = traverse_ traverseMesh_ . accumTransforms L.identity
+withRenderer render = withRendererPosed render Nothing
+
+withRendererPosed :: Monad m
+  => (L.M44 Float -> MeshPrimitive -> m ())
+  -> Maybe (Text, Float) -- Animation name and time
+  -> Model
+  -> m ()
+withRendererPosed render anim = traverse_ (nodeWithRenderer render)
+  . accumTransforms L.identity . _modelScene
  where
-  traverseMesh_ SceneNode{..} = mapM_ (mapM_ (render nodeMatrix)) nodeMesh
+  nodeWithRenderer :: Monad m
+    => (L.M44 Float -> MeshPrimitive -> m ())
+    -> (L.M44 Float, SceneNode)
+    -> m ()
+  nodeWithRenderer render' (m, SceneNode{..}) =
+    mapM_ (mapM_ (render' m)) _nodeMesh
 
-  accumTransforms m (Node s ns) =
-    let SceneNode{..} = s
-        m' = m !*! nodeMatrix
-    in Node (s { nodeMatrix = m' }) . fmap (accumTransforms m') $ ns
-
--- FIXME - we should fail with an error if there is missing data essential to
--- rendering. e.g. tangents
-fromGlbFile :: FilePath -> IO Model
-fromGlbFile pathname = do
-  printf "Loading model \"%s\"...\n" pathname
-  eGlb <- G.fromBinaryFile pathname
-  gltf <- case eGlb of
-    Left  _ -> fail "loadModel: Failed to read GLB."
-    Right g -> return $ G.unGltf g
-  let Gltf{..} = gltf
-      baseColorTextureIxs = V.catMaybes . fmap getMaterialBaseColorTextureId
-        $ gltfMaterials
-  textures <- mapM (uncurry $ loadTexture gltfImages gltfSamplers)
-                . V.imap (\i t -> (i `elem` baseColorTextureIxs, t))
-                $ gltfTextures
-  let materials = fmap (loadMaterial textures) gltfMaterials
-  meshes <- mapM (mapM (loadMeshPrimitive materials) . G.meshPrimitives) gltfMeshes
-  let scene = makeSceneGraph gltfScenes gltfNodes meshes
-  return scene
- where
-  getMaterialBaseColorTextureId = pure . G.textureId <=< G.pbrBaseColorTexture <=< G.materialPbrMetallicRoughness
-
-  makeSceneGraph :: Vector G.Scene
-    -> Vector G.Node
-    -> Vector Mesh
+  accumTransforms :: L.M44 Float
     -> Tree SceneNode
-  makeSceneGraph scenes nodes meshes =
-    let rootIxs = if F.null scenes then mempty else G.sceneNodes $ V.head scenes
-    in Node (SceneNode L.identity Nothing) . F.toList
-         . fmap (makeNode . (nodes !)) $ rootIxs
+    -> Tree (L.M44 Float, SceneNode)
+  accumTransforms m (Node n ns) =
+    let m' = (m !*!) . nodeTransform . applyAnimation $ n
+    in Node (m', n) . fmap (accumTransforms m') $ ns
+
+  nodeTransform :: SceneNode -> L.M44 Float
+  nodeTransform SceneNode{..} =
+    let s = M.scale _nodeScale
+        r = L.fromQuaternion _nodeRotation
+        t = _nodeTranslation
+        tr = L.mkTransformationMat r t
+    in tr !*! s
+
+  applyAnimation :: SceneNode -> SceneNode
+  applyAnimation n@SceneNode{..} = fromMaybe n $ do
+    (name, t) <- anim
+    channels <- M.lookup name _nodeAnimations
+    return . foldl' (flip ($)) n
+      . fmap (applyChannel t <$> G.channelSamplerInputs <*> G.channelSamplerOutputs) $ channels
    where
-    makeNode :: G.Node -> Tree SceneNode
-    makeNode G.Node{..} =
-      let s = maybe L.identity M.scale nodeScale
-          r = maybe L.identity L.fromQuaternion nodeRotation
-          t = fromMaybe 0 nodeTranslation
-          tr = L.mkTransformationMat r t
-          trs = tr !*! s
-          ns = F.toList . fmap (makeNode . (nodes !)) $ nodeChildren
-          mesh = fmap (meshes !) nodeMeshId
-      in Node (SceneNode trs mesh) ns
+    applyChannel :: Float
+      -> Vector Float
+      -> G.ChannelSamplerOutput
+      -> SceneNode
+      -> SceneNode
+    applyChannel t input (G.Rotation rs) =
+      maybe id (set nodeRotation) . interpolate t . V.zip input $ rs
+    applyChannel t input (G.Scale ss) =
+      maybe id (set nodeScale) . interpolate t . V.zip input $ ss
+    applyChannel t input (G.Translation ts) =
+      maybe id (set nodeTranslation) . interpolate t . V.zip input $ ts
+    applyChannel _ _ _ = id
 
-{-# NOINLINE missingImageData #-}
-missingImageData :: ByteString
-missingImageData = unsafePerformIO $ do
-  putStrLn "Reading default image texture."
-  BS.readFile "assets/textures/missing-texture.png"
-
-{-# NOINLINE identityTexture #-}
--- Multiplicative identity used when a material has no texture so we have
--- something to multiply the pbrBaseColorFactor by.
-identityTexture :: GL.TextureObject
-identityTexture =
-  let image = (Image 1 1 . SV.fromList $ [255, 255, 255]) :: Image PixelRGB8
-  in unsafePerformIO
-       . T.fromImage False (T.Nearest, Nothing) T.Nearest T.Repeat T.Repeat
-       $ image
-
-defaultBaseColorFactor :: Num a => L.V4 a
-defaultBaseColorFactor = 1
-
-defaultNormalMap :: GL.TextureObject
-defaultNormalMap =
-  let image = (Image 1 1 . SV.fromList $ [0, 0, 255]) :: Image PixelRGB8
-  in unsafePerformIO
-       . T.fromImage False (T.Nearest, Nothing) T.Nearest T.Repeat T.Repeat
-       $ image
-
-defaultMaterial :: Material
-defaultMaterial = Material {
-    materialAlphaCutoff = 0.5,
-    materialAlphaMode = G.Opaque,
-    materialBaseColorFactor = defaultBaseColorFactor,
-    materialBaseColorTexture = identityTexture,
-    materialDoubleSided = False,
-    materialNormalMap = defaultNormalMap,
-    materialNormalMapScale = 1,
-    materialMetallicRoughnessTexture = identityTexture
-  }
-
-loadTexture :: Vector G.Image
-  -> Vector G.Sampler
-  -> T.SRGB
-  -> G.Texture
-  -> IO GL.TextureObject
-loadTexture images samplers srgb G.Texture{..} = do
-  let mSampler = fmap (samplers !) textureSamplerId
-      wrapS = maybe T.Repeat (toWrapMode . G.samplerWrapS) mSampler
-      wrapT = maybe T.Repeat (toWrapMode . G.samplerWrapS) mSampler
-      minF = maybe (T.Nearest, Nothing) toMinFilter
-               $ G.samplerMinFilter =<< mSampler
-      magF = maybe T.Nearest toMagFilter
-               $ G.samplerMagFilter =<< mSampler
-  let image = fromMaybe missingImageData
-                $ G.imageData . (images !) =<< textureSourceId
-  T.decodeImage srgb minF magF wrapS wrapT image
- where
-  toMinFilter :: G.MinFilter -> T.MinificationFilter
-  toMinFilter f = case f of
-    G.MinNearest              -> (T.Nearest, Nothing)
-    G.MinLinear               -> (T.Linear', Nothing)
-    G.MinNearestMipmapNearest -> (T.Nearest, Just T.Nearest)
-    G.MinLinearMipmapNearest  -> (T.Linear', Just T.Nearest)
-    G.MinNearestMipmapLinear  -> (T.Nearest, Just T.Linear')
-    G.MinLinearMipmapLinear   -> (T.Linear', Just T.Linear')
-
-  toMagFilter :: G.MagFilter -> T.MagnificationFilter
-  toMagFilter f = case f of
-    G.MagLinear  -> T.Linear'
-    G.MagNearest -> T.Nearest
-
-  toWrapMode :: G.SamplerWrap -> T.TextureWrapMode
-  toWrapMode w = case w of
-    G.ClampToEdge    -> T.ClampToEdge
-    G.MirroredRepeat -> T.MirroredRepeat
-    G.Repeat         -> T.Repeat
-
-loadMaterial :: Vector GL.TextureObject -> G.Material -> Material
-loadMaterial textures G.Material{..} =
-  -- TODO Apply vertex color and baseColorFactor weights to baseColorTexture
-  let colorFactor = maybe defaultBaseColorFactor G.pbrBaseColorFactor
-                      materialPbrMetallicRoughness
-      colorTexture =
-        maybe identityTexture ((textures !) . G.textureId)
-          $ G.pbrBaseColorTexture =<< materialPbrMetallicRoughness
-  -- TODO Apply scaling factor to normal map
-      normalMap = maybe defaultNormalMap ((textures !) . G.normalTextureId)
-                    materialNormalTexture
-      normalMapScale = maybe 1 G.normalTextureScale materialNormalTexture
-  -- TODO Apply metallic roughness factors to metallicRoughnessTexture
-      metallicRoughnessTexture =
-        maybe identityTexture ((textures !) . G.textureId)
-          $ G.pbrMetallicRoughnessTexture =<< materialPbrMetallicRoughness
-  in Material {
-       materialAlphaCutoff = materialAlphaCutoff,
-       materialAlphaMode = materialAlphaMode,
-       materialBaseColorFactor = colorFactor,
-       materialBaseColorTexture = colorTexture,
-       materialDoubleSided = materialDoubleSided,
-       materialNormalMap = normalMap,
-       materialNormalMapScale = normalMapScale,
-       materialMetallicRoughnessTexture = metallicRoughnessTexture
-    }
-
-loadMeshPrimitive :: Vector Material -> G.MeshPrimitive -> IO MeshPrimitive
-loadMeshPrimitive materials G.MeshPrimitive{..} = do
-  -- Do some checks
-  when (null meshPrimitiveIndices) . error
-    $ "Mesh primitives are required to be indexed."
-  when (null meshPrimitiveNormals) . error
-    $ "Mesh primitive missing normals."
-  when (null meshPrimitiveTangents) . error
-    $ "Mesh primitive missing tangents."
-  when (null meshPrimitiveTexCoords) . error
-    $ "Mesh primitive missing texture co-ordinates."
-  -- Create and bind VAO
-  vao <- GL.genObjectName
-  GL.bindVertexArrayObject $= Just vao
-  -- Load indices
-  ebo <- GL.genObjectName
-  GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-  SV.unsafeWith (V.convert meshPrimitiveIndices) $ \(ptr :: Ptr Word32) -> do
-    let size = fromIntegral . (* sizeOf (undefined :: Word32)) . length
-                 $ meshPrimitiveIndices
-    GL.bufferData GL.ElementArrayBuffer $= (size, ptr, GL.StaticDraw)
-  -- Load vertex data
-  vbos <- sequence [
-      -- Position
-      loadVertexAttribute 0 3 meshPrimitivePositions,
-      -- Normals
-      loadVertexAttribute 1 3 meshPrimitiveNormals,
-      -- Tangents
-      loadVertexAttribute 2 4 meshPrimitiveTangents,
-      -- Texture co-ordinates
-      loadVertexAttribute 3 2 meshPrimitiveTexCoords
-    ]
-  GL.bindVertexArrayObject $= Nothing
-  GL.bindBuffer GL.ElementArrayBuffer $= Nothing
-  GL.bindBuffer GL.ArrayBuffer $= Nothing
-  let mode = toGlPrimitiveMode meshPrimitiveMode
-      material = maybe defaultMaterial (materials !) meshPrimitiveMaterial
-  return . MeshPrimitive material mode vao vbos ebo . fromIntegral . length
-    $ meshPrimitiveIndices
- where
-  loadVertexAttribute location components attrs = do
-    vbo <- GL.genObjectName
-    GL.bindBuffer GL.ArrayBuffer $= Just vbo
-    SV.unsafeWith (V.convert attrs) $ \ptr -> do
-      let size = fromIntegral . (* sizeOf (undefined :: Float))
-                   . (* components) . length $ attrs
-      GL.bufferData GL.ArrayBuffer $= (size, ptr, GL.StaticDraw)
-    let attrLoc = GL.AttribLocation location
-    GL.vertexAttribPointer attrLoc $=
-      (GL.ToFloat,
-       GL.VertexArrayDescriptor
-         (fromIntegral components)
-         GL.Float
-         0 -- stride=0, only one attribute per buffer
-         nullPtr
-      )
-    GL.vertexAttribArray attrLoc $= GL.Enabled
-    return vbo
-
-toGlPrimitiveMode :: G.MeshPrimitiveMode -> GL.PrimitiveMode
-toGlPrimitiveMode p = case p of
-  G.Lines         -> GL.Lines
-  G.LineLoop      -> GL.LineLoop
-  G.LineStrip     -> GL.LineStrip
-  G.Points        -> GL.Points
-  G.Triangles     -> GL.Triangles
-  G.TriangleFan   -> GL.TriangleFan
-  G.TriangleStrip -> GL.TriangleStrip
+    interpolate :: Float -> Vector (Float, a) -> Maybe a
+    interpolate t keyframes = do
+      i <- V.findIndex ((> t) . fst) keyframes
+      fmap snd . (keyframes V.!?) $ i
 
 deleteModel :: Model -> IO ()
 deleteModel = undefined

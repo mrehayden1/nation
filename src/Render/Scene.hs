@@ -3,6 +3,7 @@ module Render.Scene (
 ) where
 
 import Control.Lens
+import Data.Fixed
 import Data.StateVar
 import Foreign
 import Linear (M44)
@@ -71,7 +72,8 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
         GL.Size (fromIntegral windowWidth) (fromIntegral windowHeight)
       )
     GL.clear [GL.ColorBuffer, GL.DepthBuffer]
-    mapM_ (withRenderer (renderMeshPrimitive pipeline)) scene
+    mapM_ (withRendererPosed (renderMeshPrimitive pipeline) (Just ("Walk", animationTime `mod'` 1))) scene
+    --mapM_ (withRenderer (renderMeshPrimitive pipeline)) scene
     -- Unbind textures
     GL.activeTexture $= GL.TextureUnit shadowMapTextureUnit
     GL.textureBinding GL.Texture2D $= Nothing

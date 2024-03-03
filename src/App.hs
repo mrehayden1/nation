@@ -81,11 +81,12 @@ data Sun = Sun {
 }
 
 data WorldState = WorldState {
+  animationTime :: Float,
+  camera :: Camera Float,
   daylightAmbientIntensity :: Float,
   -- | Pointing at the sun
-  sun :: Sun,
-  camera :: Camera Float,
-  playerPosition :: PlayerPosition
+  playerPosition :: PlayerPosition,
+  sun :: Sun
 }
 
 type PosX = Float
@@ -121,6 +122,7 @@ game :: forall t m. (Adjustable t m, MonadFix m, MonadHold t m,
 game eInput = do
   Env {..} <- ask
   delta <- holdDyn 0 . fmap deltaT $ eInput
+  animationT <- foldDyn ((+) . realToFrac) 0 . fmap deltaT $ eInput
   cursor <- holdDyn (0, 0) . fmap cursorPos $ eInput
   let keyPresses = fmap (fmap fst3 . filter ((== GLFW.KeyState'Pressed) . snd3) . keys) eInput
   heldKeys <- foldDyn (flip (foldl (flip $ uncurry3 updateHeldKeys)) . keys) [] eInput
@@ -138,14 +140,15 @@ game eInput = do
   let playerCamera = fmap (uncurry playerPositionCamera) playerPosition
   debugCam <- debugCamera delta playerCamera debugCameraOn heldKeys cursor
   let camera = debugCameraOn >>= \d -> if d then debugCam else playerCamera
-      ambientLight = pure 0.1
   sunPitch <- foldDyn (uncurry updateSunPitch) (pi / 2) . updated
     $ (,) <$> delta <*> heldKeys
-  let worldState = WorldState
-        <$> ambientLight
-        <*> (Sun <$> sunPitch <*> pure (pi / 8))
+  let ambientLight = fmap ((* 1) . max 0 . sin) sunPitch
+      worldState = WorldState
+        <$> animationT
         <*> camera
+        <*> ambientLight
         <*> playerPosition
+        <*> (Sun <$> sunPitch <*> pure (pi / 8))
   let output = Output
         <$> shouldExit
         <*> overlayQuad

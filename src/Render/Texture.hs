@@ -9,7 +9,9 @@ module Render.Texture (
 
   readImage,
   decodeImage,
-  fromImage
+  fromImage,
+
+  missingImageData
 ) where
 
 import Codec.Picture hiding (readImage, decodeImage)
@@ -17,12 +19,13 @@ import qualified Codec.Picture as P
 import Codec.Picture.Extra
 import Codec.Picture.Types
 import Control.Monad
-import Data.ByteString
+import Data.ByteString as BS
 import Data.Maybe
 import Data.StateVar
 import qualified Data.Vector.Storable as V
 import Foreign.Ptr
 import qualified Graphics.Rendering.OpenGL as GL
+import System.IO.Unsafe
 
 -- Wether a loaded texture should be linearised
 type SRGB = Bool
@@ -30,6 +33,12 @@ type SRGB = Bool
 type TextureWrapModeS = TextureWrapMode
 type TextureWrapModeT = TextureWrapMode
 data TextureWrapMode = ClampToEdge | MirroredRepeat | Repeat
+
+{-# NOINLINE missingImageData #-}
+missingImageData :: ByteString
+missingImageData = unsafePerformIO $ do
+  putStrLn "Reading default image texture."
+  BS.readFile "assets/textures/missing-texture.png"
 
 -- Loads a 2D texture from an image file
 readImage :: SRGB
