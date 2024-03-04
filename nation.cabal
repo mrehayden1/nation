@@ -28,6 +28,7 @@ executable nation
       App
       Camera
       Cursor
+      Model
       Render.Debug
       Render.Element
       Render.Matrix

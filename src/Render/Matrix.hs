@@ -18,7 +18,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Linear as L
 import Linear (Epsilon(..), V3(..), V4(..), M44)
 
-import qualified Vector as V
+import Vector
 
 -- Calculate the projection needed to build a depth map for directional light
 directionalLightProjection :: (Epsilon a, Floating a) => M44 a
@@ -56,7 +56,7 @@ directionalLightViewMatrix :: (Epsilon a, Floating a)
   -> M44 a
 directionalLightViewMatrix pitch yaw =
   -- TODO Make a function of the camera view
-  let dir    = V.direction pitch yaw
+  let dir    = cameraDirection pitch yaw
       -- the 'centre' to which the camera is looking
       centre = V3 0 0 0
       -- no camera roll so the camera is always on the x-z plane

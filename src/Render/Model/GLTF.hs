@@ -7,19 +7,14 @@ import Data.Foldable as F
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
-import Data.StateVar
 import Data.Text (Text)
 import Data.Tree
 import Data.Vector (Vector, (!))
 import qualified Data.Vector as V
-import qualified Data.Vector.Storable as SV
-import Data.Word
-import Foreign
 import qualified Graphics.Rendering.OpenGL as GL
 import Linear
 import Text.GLTF.Loader (Gltf(..))
 import qualified Text.GLTF.Loader as G
-import Text.Printf
 
 import qualified Render.Model.GLTF.Material as M
 import Render.Model.GLTF.Texture as GT
@@ -27,7 +22,6 @@ import Render.Model.Model
 
 fromGlbFile :: FilePath -> IO Model
 fromGlbFile pathname = do
-  printf "Loading model \"%s\"...\n" pathname
   eGlb <- G.fromBinaryFile pathname
   gltf <- case eGlb of
     Left  _ -> fail "fromGlbFile: Failed to read GLB."
@@ -94,53 +88,10 @@ loadMeshPrimitive materials G.MeshPrimitive{..} = do
     $ "Mesh primitive missing tangents."
   when (null meshPrimitiveTexCoords) . error
     $ "Mesh primitive missing texture co-ordinates."
-  -- Create and bind VAO
-  vao <- GL.genObjectName
-  GL.bindVertexArrayObject $= Just vao
-  -- Load indices
-  ebo <- GL.genObjectName
-  GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-  SV.unsafeWith (V.convert meshPrimitiveIndices) $ \(ptr :: Ptr Word32) -> do
-    let size = fromIntegral . (* sizeOf (undefined :: Word32)) . length
-                 $ meshPrimitiveIndices
-    GL.bufferData GL.ElementArrayBuffer $= (size, ptr, GL.StaticDraw)
-  -- Load vertex data
-  vbos <- sequence [
-      -- Position
-      loadVertexAttribute 0 3 meshPrimitivePositions,
-      -- Normals
-      loadVertexAttribute 1 3 meshPrimitiveNormals,
-      -- Tangents
-      loadVertexAttribute 2 4 meshPrimitiveTangents,
-      -- Texture co-ordinates
-      loadVertexAttribute 3 2 meshPrimitiveTexCoords
-    ]
-  GL.bindVertexArrayObject $= Nothing
-  GL.bindBuffer GL.ElementArrayBuffer $= Nothing
-  GL.bindBuffer GL.ArrayBuffer $= Nothing
   let mode = toGlPrimitiveMode meshPrimitiveMode
       material = maybe defaultMaterial (materials !) meshPrimitiveMaterial
-  return . MeshPrimitive material mode vao vbos ebo . fromIntegral . length
-    $ meshPrimitiveIndices
- where
-  loadVertexAttribute location components attrs = do
-    vbo <- GL.genObjectName
-    GL.bindBuffer GL.ArrayBuffer $= Just vbo
-    SV.unsafeWith (V.convert attrs) $ \ptr -> do
-      let size = fromIntegral . (* sizeOf (undefined :: Float))
-                   . (* components) . length $ attrs
-      GL.bufferData GL.ArrayBuffer $= (size, ptr, GL.StaticDraw)
-    let attrLoc = GL.AttribLocation location
-    GL.vertexAttribPointer attrLoc $=
-      (GL.ToFloat,
-       GL.VertexArrayDescriptor
-         (fromIntegral components)
-         GL.Float
-         0 -- stride=0, only one attribute per buffer
-         nullPtr
-      )
-    GL.vertexAttribArray attrLoc $= GL.Enabled
-    return vbo
+  meshPrimitive material mode meshPrimitiveIndices meshPrimitivePositions
+    meshPrimitiveNormals meshPrimitiveTangents meshPrimitiveTexCoords
 
 toGlPrimitiveMode :: G.MeshPrimitiveMode -> GL.PrimitiveMode
 toGlPrimitiveMode p = case p of

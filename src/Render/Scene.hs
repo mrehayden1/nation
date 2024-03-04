@@ -63,7 +63,7 @@ createSceneRenderer env@Env{..} scene shadowDepthMap = do
     pipelineUniform pipeline "ambientIntensity" $= daylightAmbientIntensity
     -- Set light direction
     pipelineUniform pipeline "lightDirection" $=
-      (V.toGlVector3 . V.direction (sunPitch sun) . sunYaw $ sun)
+      (V.toGlVector3 . V.cameraDirection (sunPitch sun) . sunYaw $ sun)
     -- Set camera position
     pipelineUniform pipeline "camPos" $= (V.toGlVector3 . camPos $ camera)
     -- Render

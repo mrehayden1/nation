@@ -17,8 +17,10 @@ import Reflex
 import Reflex.GLFW.Simple
 import Reflex.Host.Headless
 import Reflex.Network
+import Text.Printf
 
 import App
+import Model
 import Render.Debug
 import Render.Model
 import Render.Scene
@@ -48,18 +50,17 @@ main = do
     -- Used to get the time the frame was last refreshed
     timeRef <- newIORef 0
     -- Create graphics elements
-    monument <- fromGlbFile "assets/models/monument.glb"
-    horse <- fromGlbFile "assets/models/horse.glb"
-    grass <- fromGlbFile "assets/models/grass-tile.glb"
-    fauna <- fromGlbFile "assets/models/fauna.glb"
+    monument <- loadModel "assets/models/monument.glb"
+    horse <- loadModel "assets/models/horse.glb"
+    --grass <- fromGlbFile "assets/models/grass-tile.glb"
+    grass <- loadGrass
+    fauna <- loadModel "assets/models/fauna.glb"
     let scene = set modelTranslation (V3 4 0 4) horse
           : set modelTranslation (V3 (-3) 0 (-3)) monument
+          : grass
           : [
             set modelTranslation (V3 (x * 16) 0 (z * 16)) fauna |
             x <- [-1..1], z <- [-1..1]
-          ] ++ [
-            set modelTranslation (V3 (x * 4.5) 0 (z * 4.5)) grass |
-            x <- [-5..5], z <- [-5..5]
           ]
     -- Create a depth buffer object and depth map texture
     (shadowDepthMapTexture, renderShadowDepthMap)
@@ -103,6 +104,11 @@ main = do
         $ eFrame
       return eShutdown
  where
+  loadModel :: FilePath -> IO Model
+  loadModel pathname = do
+    printf "Loading model \"%s\"...\n" pathname
+    fromGlbFile pathname
+
   progressFrame :: MonadIO m
     => IORef POSIXTime
     -> ((Time, DeltaT) -> m ())
