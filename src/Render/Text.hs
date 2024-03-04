@@ -17,6 +17,7 @@ import Foreign
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Linear as L
 
+import Render.Env
 import Render.Element
 import qualified Render.Matrix as M
 import Render.Pipeline
@@ -45,8 +46,8 @@ data TextBackground = TextBackground {
 -- Create a renderer that renders text in "debug text space" which has -1 and 1
 -- touching the left and right window edges respectively along the longest axis
 -- of the viewport (in practice this will be along the x-axis)
-createDebugTextRenderer :: Float -> IO (Text -> IO ())
-createDebugTextRenderer viewportAspectRatio = do
+createDebugTextRenderer :: IO (RenderEnv -> Text -> IO ())
+createDebugTextRenderer = do
   textPipeline <- compilePipeline [
       ("text", VertexShader),
       ("text", FragmentShader)
@@ -55,17 +56,17 @@ createDebugTextRenderer viewportAspectRatio = do
       ("text-background", VertexShader),
       ("text-background", FragmentShader)
     ]
-  return $ \text -> do
-    renderBackground backgroundPipeline text
-    renderText textPipeline text
+  return $ \env text -> do
+    renderBackground backgroundPipeline env text
+    renderText textPipeline env text
  where
-  renderText :: Pipeline -> Text -> IO ()
-  renderText pipeline Text{..} = do
+  renderText :: Pipeline -> RenderEnv -> Text -> IO ()
+  renderText pipeline env Text{..} = do
     let MsdfFont{..} = textFont
     bindPipeline pipeline
     -- Set projection matrix
     let projectionUniform = pipelineUniform pipeline "projectionM"
-    projectionM <- M.toGlMatrix projection
+    projectionM <- M.toGlMatrix . projection $ env
     projectionUniform $= (projectionM :: GL.GLmatrix GL.GLfloat)
     -- Bind Texture
     GL.activeTexture $= GL.TextureUnit 0
@@ -78,14 +79,14 @@ createDebugTextRenderer viewportAspectRatio = do
     GL.bindVertexArrayObject $= Nothing
     GL.textureBinding GL.Texture2D $= Nothing
 
-  renderBackground :: Pipeline -> Text -> IO ()
-  renderBackground pipeline text = do
+  renderBackground :: Pipeline -> RenderEnv -> Text -> IO ()
+  renderBackground pipeline env text = do
     let TextBackground{..} = textBackground text
     bindPipeline pipeline
     -- Set projection matrix
     -- TODO don't create the projection every render
     let projectionUniform = pipelineUniform pipeline "projectionM"
-    projectionM <- M.toGlMatrix projection
+    projectionM <- M.toGlMatrix . projection $ env
     projectionUniform $= (projectionM :: GL.GLmatrix GL.GLfloat)
     -- Bind VAO
     GL.bindVertexArrayObject $= Just textBgVao
@@ -95,12 +96,11 @@ createDebugTextRenderer viewportAspectRatio = do
     GL.bindVertexArrayObject $= Just textBgVao
     GL.bindVertexArrayObject $= Nothing
 
-  projection :: L.M44 Float
-  projection =
-    if viewportAspectRatio > 1
-      then let t = recip viewportAspectRatio in L.ortho (-1) 1 (-t) t 1 (-1)
-      else let r = -viewportAspectRatio      in L.ortho (-r) r (-1) 1 1 (-1)
-  
+  projection :: RenderEnv -> L.M44 Float
+  projection env =
+    if aspectRatio env > 1
+      then let t = recip . aspectRatio $ env in L.ortho (-1) 1 (-t) t 1 (-1)
+      else let r = -aspectRatio env          in L.ortho (-r) r (-1) 1 1 (-1)
 
 -- createDebugText - positioned in "text space" with ems as the unit
 createDebugText :: MsdfFont -> Scale -> Origin -> String -> IO Text

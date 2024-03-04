@@ -19,10 +19,11 @@ import Linear (M44, (!*!))
 import qualified Linear as L
 import Text.Printf
 
-import App
+import App (DeltaT, Frame, Input(..), Output(..), WorldState(..))
 import Camera (Camera(..))
 import qualified Camera as Cam
 import Render.Element
+import Render.Env
 import qualified Render.Matrix as M
 import Render.Model
 import Render.Pipeline
@@ -35,8 +36,10 @@ data FpsStatistics = FpsStatistics {
   fpsHigh :: DeltaT
 }
 
-createDebugGizmoOverlayer :: Env -> IO (WorldState -> IO ())
-createDebugGizmoOverlayer env = do
+type AspectRatio = Float
+
+createDebugGizmoOverlayer :: IO (RenderEnv -> Camera -> IO ())
+createDebugGizmoOverlayer = do
   pipeline <- compilePipeline [
       ("debug/gizmo", GL.FragmentShader),
       ("debug/gizmo", GL.VertexShader)
@@ -46,7 +49,7 @@ createDebugGizmoOverlayer env = do
       projectionMUniform = pipelineUniform pipeline "projectionM"
   -- Load gizmo
   model <- fromGlbFile "assets/models/reference_frame.glb"
-  return $ \WorldState{..} -> do
+  return $ \env camera -> do
     bindPipeline pipeline
     modelM <- M.toGlMatrix (L.identity :: L.M44 GL.GLfloat)
     modelMUniform $= modelM
@@ -56,10 +59,10 @@ createDebugGizmoOverlayer env = do
                . set L.translation 0 $ cameraViewM
     viewMUniform $= viewM
     projection <- M.toGlMatrix . M.perspectiveProjection 0.1 1000
-      . windowAspectRatio $ env
+                    . aspectRatio $ env
     projectionMUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     GL.clear [GL.DepthBuffer]
-    withRenderer (renderMeshPrimitive pipeline) model
+    withRenderer (renderMeshPrimitive pipeline) 0 model
     unbindPipeline
     return ()
  where
@@ -79,10 +82,10 @@ createDebugGizmoOverlayer env = do
       nullPtr
     GL.bindVertexArrayObject $= Nothing
 
-createDebugInfoOverlayer :: Env -> IORef POSIXTime -> IO (Frame -> IO ())
-createDebugInfoOverlayer env timeRef = do
+createDebugInfoOverlayer :: IORef POSIXTime -> IO (RenderEnv -> Frame -> IO ())
+createDebugInfoOverlayer timeRef = do
   font <- loadFont "bpdots.squares-bold"
-  renderText <- createDebugTextRenderer . windowAspectRatio $ env
+  renderText <- createDebugTextRenderer
   deltasRef <- newIORef []
   fpsRef <- newIORef Nothing
   return . renderDebugText deltasRef fpsRef font $ renderText
@@ -90,10 +93,11 @@ createDebugInfoOverlayer env timeRef = do
   renderDebugText :: IORef [DeltaT]
     -> IORef (Maybe (POSIXTime, FpsStatistics))
     -> MsdfFont
-    -> (Text -> IO ())
+    -> (RenderEnv -> Text -> IO ())
+    -> RenderEnv
     -> Frame
     -> IO ()
-  renderDebugText deltasRef fpsRef font renderText (Input{..}, Output{..}) = do
+  renderDebugText deltasRef fpsRef font renderText env (Input{..}, Output{..}) = do
     let WorldState{..} = worldState
     time' <- readIORef timeRef
     when (deltaT > 0) . modifyIORef deltasRef $ (deltaT :)
@@ -130,21 +134,22 @@ createDebugInfoOverlayer env timeRef = do
     renderLines :: [String] -> IO ()
     renderLines ls = do
       -- Defined in "debug text space". See Text module.
-      let aspectRatio = windowAspectRatio env
-          screenTop = if aspectRatio > 1 then recip aspectRatio else 1
-          screenLeft = negate $ min aspectRatio 1
+      let screenTop = if aspectRatio env > 1
+                        then recip . aspectRatio $ env
+                        else 1
+          screenLeft = negate . min 1 . aspectRatio $ env
           padding = 0.025
           size = 0.02
           left = screenLeft + padding
           top line = screenTop - padding - line * size
       GL.clear [GL.DepthBuffer]
       forM_ (zip [1..] ls) $ \(n, l) -> do
-        -- TODO render the text as one draw call
+        -- TODO render text as one draw call
         t <- createDebugText font size (left, top n) l
-        renderText t
+        renderText env t
         deleteText t
 
-    cameraInfo :: (Floating a, PrintfArg a) => Camera a -> [String]
+    cameraInfo :: Camera -> [String]
     cameraInfo Camera{..} =
       let L.V3 x y z = camPos
       in [

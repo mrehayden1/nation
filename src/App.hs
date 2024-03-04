@@ -1,7 +1,6 @@
 module App (
   Env(..),
   MsaaSubsamples(..),
-  windowAspectRatio,
 
   Frame,
 
@@ -44,16 +43,9 @@ data Env = Env {
   consoleDebuggingEnabled :: Bool,
   debugInfoEnabledDefault :: Bool,
   fullscreen :: Bool,
-  windowHeight :: Int,
-  windowWidth :: Int,
   -- TODO User savable settings
   vsyncEnabled :: Bool
 }
-
-type AspectRatio = Float
-
-windowAspectRatio :: Env -> AspectRatio
-windowAspectRatio Env {..} = realToFrac windowWidth / realToFrac windowHeight
 
 type Frame = (Input, Output)
 
@@ -82,10 +74,11 @@ data Sun = Sun {
 
 data WorldState = WorldState {
   animationTime :: Float,
-  camera :: Camera Float,
+  camera :: Camera,
   daylightAmbientIntensity :: Float,
   -- | Pointing at the sun
   playerPosition :: PlayerPosition,
+  pointerPosition:: CursorPosition,
   sun :: Sun
 }
 
@@ -148,6 +141,7 @@ game eInput = do
         <*> camera
         <*> ambientLight
         <*> playerPosition
+        <*> cursor
         <*> (Sun <$> sunPitch <*> pure (pi / 8))
   let output = Output
         <$> shouldExit
@@ -165,7 +159,7 @@ game eInput = do
   updateHeldKeys k GLFW.KeyState'Released _ ks = delete k ks
   updateHeldKeys _ _                      _ ks = ks
 
-  playerPositionCamera :: Floating a => a -> a -> Camera a
+  playerPositionCamera :: Float -> Float -> Camera
   playerPositionCamera x z =
     let th = (3 * pi) / 8
         h  = 30
@@ -197,13 +191,12 @@ game eInput = do
     keyVelocity GLFW.Key'D = L.V3   1   0   0
     keyVelocity _          = L.V3   0   0   0
 
-  debugCamera :: forall a. (Floating a, Real a, L.Epsilon a)
-    => Dynamic t DeltaT
-    -> Dynamic t (Camera a)
+  debugCamera :: Dynamic t DeltaT
+    -> Dynamic t Camera
     -> Dynamic t Bool
     -> Dynamic t HeldKeys
     -> Dynamic t CursorPosition
-    -> m (Dynamic t (Camera a))
+    -> m (Dynamic t Camera)
   debugCamera delta playerCamera debugCameraOn heldKeys cursor = do
     -- Reset the debug camera to the last player camera position every time
     -- its toggled on.
@@ -212,9 +205,9 @@ game eInput = do
              . fmap (uncurry debugCameraPosition) $ camOn
     return . join $ pos
    where
-    debugCameraPosition :: Camera a
+    debugCameraPosition :: Camera
       -> Bool
-      -> m (Dynamic t (Camera a))
+      -> m (Dynamic t Camera)
     debugCameraPosition camStart camOn = do
       s <- foldDyn (uncurry3 updateDebugCamera) ((0, 0), camStart)
        . gate (pure camOn)
@@ -225,8 +218,8 @@ game eInput = do
     updateDebugCamera :: DeltaT
       -> HeldKeys
       -> CursorPosition
-      -> (CursorPosition, Camera a)
-      -> (CursorPosition, Camera a)
+      -> (CursorPosition, Camera)
+      -> (CursorPosition, Camera)
     updateDebugCamera deltaT keys (x', y') ((x, y), camera@Camera{..}) =
       let velocity = pure debugCameraSpeed * realToFrac deltaT
                        * (sum . map keyVelocity $ keys)
@@ -234,10 +227,10 @@ game eInput = do
           -- Delta pitch and yaw are the negation of the change in cursor
           -- position according to the GLFW window.
           pitch = max (-pi / 2) . min (pi / 2)
-                    . (+ realToFrac (y - y') * cameraMouseSensitivity)
+                    . (+ (y - y') * cameraMouseSensitivity)
                     $ camPitch
           yaw = (`mod'` (2 * pi)) . (+ camYaw) . (* cameraMouseSensitivity)
-                  . realToFrac $ (x - x')
+                  $ (x - x')
           camera' = camera {
             camPos   = position,
             camPitch = pitch,
@@ -248,7 +241,7 @@ game eInput = do
       -- TODO Move this somewhere easier to find
       cameraMouseSensitivity = 0.0015
 
-      keyVelocity :: GLFW.Key -> L.V3 a
+      keyVelocity :: GLFW.Key -> L.V3 Float
       keyVelocity GLFW.Key'W = Cam.direction camera
       keyVelocity GLFW.Key'A = negate . Cam.right $ camera
       keyVelocity GLFW.Key'S = negate . Cam.direction $ camera

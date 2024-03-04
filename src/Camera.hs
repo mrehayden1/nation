@@ -19,10 +19,10 @@ import qualified Linear as L
 -- horizontal.
 
 -- TODO Investigate storing the camera state as a matrix.
-data Camera a = Camera {
-  camPitch :: !a,
-  camPos :: !(L.V3 a),
-  camYaw :: !a
+data Camera = Camera {
+  camPitch :: !Float,
+  camPos :: !(L.V3 Float),
+  camYaw :: !Float
 } deriving (Show)
 
 -- World up unit vector
@@ -30,17 +30,17 @@ worldUp :: Floating a => L.V3 a
 worldUp = L.V3 0 1 0
 
 -- Directional unit vector of the camera given pitch and yaw
-direction :: (Floating a, L.Epsilon a) => Camera a -> L.V3 a
+direction :: Camera -> L.V3 Float
 direction Camera{..} =
   let x = cos camYaw * cos camPitch
       y = sin camPitch
       z = negate $ sin camYaw * cos camPitch
   in L.normalize $ L.V3 x y z
 
-right :: Floating a => Camera a -> L.V3 a
+right :: Camera -> L.V3 Float
 right Camera{..} = L.V3 (sin camYaw) 0 (cos camYaw)
 
-toViewMatrix :: (Floating a, L.Epsilon a) => Camera a -> L.M44 a
+toViewMatrix :: Camera -> L.M44 Float
 toViewMatrix cam@Camera{..} =
   let dir    = direction cam
       -- the 'centre' to which the camera is looking

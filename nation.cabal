@@ -31,6 +31,7 @@ executable nation
       Model
       Render.Debug
       Render.Element
+      Render.Env
       Render.Matrix
       Render.Model
       Render.Model.GLTF
@@ -39,8 +40,9 @@ executable nation
       Render.Model.Model
       Render.Pipeline
       Render.Scene
+      Render.Scene.Scene
+      Render.Scene.Shadow
       Render.Shaders
-      Render.Shadow
       Render.Text
       Render.Text.Font.MSDF
       Render.Texture

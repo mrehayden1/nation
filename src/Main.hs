@@ -3,10 +3,10 @@ module Main (
 ) where
 
 import Control.Exception
-import Control.Lens
 import Control.Monad
 import Control.Monad.Reader
 import Data.IORef
+import Data.Map
 import Data.Maybe
 import Data.StateVar
 import Data.Time.Clock.POSIX
@@ -17,14 +17,13 @@ import Reflex
 import Reflex.GLFW.Simple
 import Reflex.Host.Headless
 import Reflex.Network
-import Text.Printf
 
 import App
 import Model
 import Render.Debug
-import Render.Model
-import Render.Scene
-import Render.Shadow
+import Render.Env
+import qualified Render.Scene as Scene
+import qualified Render.Scene.Shadow as Shadow
 
 appName :: String
 appName = "Nation"
@@ -32,15 +31,17 @@ appName = "Nation"
 appEnv :: Env
 appEnv = Env {
   -- TODO Add debugging build flag?
-  consoleDebuggingEnabled = True,
+  consoleDebuggingEnabled = False,
   debugInfoEnabledDefault = True,
   fullscreen = False,
-  multisampleSubsamples = Msaa4x,
-  windowHeight = 1080,
-  windowWidth = 1920,
---windowHeight = 768,
---windowWidth = 1024,
+  multisampleSubsamples = Msaa16x,
   vsyncEnabled = False
+}
+
+renderEnv :: RenderEnv
+renderEnv = RenderEnv {
+  viewportHeight = 1080,
+  viewportWidth = 1920
 }
 
 main :: IO ()
@@ -50,33 +51,49 @@ main = do
     -- Used to get the time the frame was last refreshed
     timeRef <- newIORef 0
     -- Create graphics elements
-    monument <- loadModel "assets/models/monument.glb"
-    horse <- loadModel "assets/models/horse.glb"
-    --grass <- fromGlbFile "assets/models/grass-tile.glb"
-    grass <- loadGrass
-    fauna <- loadModel "assets/models/fauna.glb"
-    let scene = set modelTranslation (V3 4 0 4) horse
-          : set modelTranslation (V3 (-3) 0 (-3)) monument
-          : grass
-          : [
-            set modelTranslation (V3 (x * 16) 0 (z * 16)) fauna |
-            x <- [-1..1], z <- [-1..1]
-          ]
+    models <- loadModels
     -- Create a depth buffer object and depth map texture
     (shadowDepthMapTexture, renderShadowDepthMap)
-      <- createShadowDepthMapper scene
+      <- Shadow.createShadowDepthMapper
     -- Create renderers
-    renderScene <- createSceneRenderer appEnv scene shadowDepthMapTexture
+    renderScene <- Scene.createSceneRenderer shadowDepthMapTexture
     overlayDebugQuad <- createDebugQuadOverlayer shadowDepthMapTexture
-    overlayDebugInfo <- createDebugInfoOverlayer appEnv timeRef
-    overlayGizmo <- createDebugGizmoOverlayer appEnv
-    let renderFrame frame@(_, Output{..}) = do
-          renderShadowDepthMap worldState
-          renderScene worldState
+    overlayDebugInfo <- createDebugInfoOverlayer timeRef
+    overlayGizmo <- createDebugGizmoOverlayer
+    let renderFrame frame@(Input{..}, Output{..}) = do
+          let WorldState{..} = worldState
+              scene = Scene.Scene {
+                sceneCamera = camera,
+                sceneElements = [
+                  Scene.Element {
+                    elementAnimation = Nothing,
+                    elementModel = models ! Grass,
+                    elementPosition = V3 0 0 0
+                  },
+                  Scene.Element {
+                    elementAnimation = Just ("spin", 5, animationTime),
+                    elementModel = models ! Pointer,
+                    elementPosition = V3 (fst cursorPos / 50) 0 . (/50) . snd $ cursorPos
+                  },
+                  Scene.Element {
+                    elementAnimation = Just ("Idle", 3, animationTime),
+                    elementModel = models ! Horse,
+                    elementPosition = V3 0 0 0
+                  }
+                ],
+                sceneDaylight = Scene.Daylight {
+                  daylightAmbientIntensity = daylightAmbientIntensity,
+                  daylightPitch = sunPitch sun,
+                  daylightYaw = sunYaw sun
+                }
+              }
+          renderShadowDepthMap scene
+          renderScene renderEnv scene
           when shouldOverlayLightDepthQuad overlayDebugQuad
           when shouldOverlayDebugInfo $ do
-            overlayDebugInfo frame
-            unless shouldOverlayLightDepthQuad $ overlayGizmo worldState
+            overlayDebugInfo renderEnv frame
+            unless shouldOverlayLightDepthQuad . overlayGizmo renderEnv
+              $ camera
           GLFW.swapBuffers win
     -- Enter game loop
     runHeadlessApp $ do
@@ -104,11 +121,6 @@ main = do
         $ eFrame
       return eShutdown
  where
-  loadModel :: FilePath -> IO Model
-  loadModel pathname = do
-    printf "Loading model \"%s\"...\n" pathname
-    fromGlbFile pathname
-
   progressFrame :: MonadIO m
     => IORef POSIXTime
     -> ((Time, DeltaT) -> m ())
@@ -128,7 +140,8 @@ main = do
 
 initialise :: IO GLFW.Window
 initialise = do
-  let Env {..} = appEnv
+  let Env{..} = appEnv
+      RenderEnv{..} = renderEnv
   r <- GLFW.init
   unless r (error "GLFW.init error.")
   GLFW.defaultWindowHints
@@ -145,7 +158,8 @@ initialise = do
   -- Create window
   monitor' <- if fullscreen then GLFW.getPrimaryMonitor else return Nothing
   window <- fmap (fromMaybe (error "GLFW failed to create window."))
-    . GLFW.createWindow windowWidth windowHeight appName monitor' $ Nothing
+    . GLFW.createWindow viewportWidth viewportHeight appName monitor'
+    $ Nothing
   GLFW.makeContextCurrent (Just window)
   -- Enable console debugging output
   when consoleDebuggingEnabled $ do

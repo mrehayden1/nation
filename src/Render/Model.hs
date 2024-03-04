@@ -14,6 +14,7 @@ module Render.Model (
 ) where
 
 import Control.Lens hiding (transform)
+import Data.Fixed
 import Data.Foldable as F
 import qualified Data.Map as M
 import Data.Maybe
@@ -21,8 +22,7 @@ import Data.Text (Text)
 import Data.Tree
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Linear ((!*!))
-import qualified Linear as L
+import Linear as L
 import qualified Text.GLTF.Loader as G
 
 import Render.Matrix as M
@@ -31,17 +31,19 @@ import Render.Model.GLTF
 
 withRenderer :: forall m. Monad m
   => (L.M44 Float -> MeshPrimitive -> m ())
+  -> V3 Float
   -> Model
   -> m ()
 withRenderer render = withRendererPosed render Nothing
 
 withRendererPosed :: Monad m
   => (L.M44 Float -> MeshPrimitive -> m ())
-  -> Maybe (Text, Float) -- Animation name and time
+  -> Maybe (Text, Float, Float) -- Animation name and duration and, time
+  -> V3 Float
   -> Model
   -> m ()
-withRendererPosed render anim = traverse_ (nodeWithRenderer render)
-  . accumTransforms L.identity . _modelScene
+withRendererPosed render anim pos = traverse_ (nodeWithRenderer render)
+  . accumTransforms (M.translate pos) . _modelScene
  where
   nodeWithRenderer :: Monad m
     => (L.M44 Float -> MeshPrimitive -> m ())
@@ -67,10 +69,10 @@ withRendererPosed render anim = traverse_ (nodeWithRenderer render)
 
   applyAnimation :: SceneNode -> SceneNode
   applyAnimation n@SceneNode{..} = fromMaybe n $ do
-    (name, t) <- anim
+    (name, duration, time) <- anim
     channels <- M.lookup name _nodeAnimations
     return . foldl' (flip ($)) n
-      . fmap (applyChannel t <$> G.channelSamplerInputs <*> G.channelSamplerOutputs) $ channels
+      . fmap (applyChannel (time `mod'` duration) <$> G.channelSamplerInputs <*> G.channelSamplerOutputs) $ channels
    where
     applyChannel :: Float
       -> Vector Float
