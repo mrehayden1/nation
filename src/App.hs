@@ -32,8 +32,8 @@ import Reflex
 import Reflex.Network
 
 import Camera (Camera(..))
-import Cursor
 import qualified Camera as Cam
+import Cursor
 
 data MsaaSubsamples = MsaaNone | Msaa2x | Msaa4x | Msaa8x | Msaa16x
   deriving (Eq, Enum)
@@ -165,7 +165,9 @@ game eInput = do
         h  = 30
     in Camera {
          camPitch = negate th,
+         -- always look at the player position
          camPos = L.V3 x h (z + h / tan th),
+         -- towards -z
          camYaw = pi / 2
        }
 
@@ -225,7 +227,7 @@ game eInput = do
                        * (sum . map keyVelocity $ keys)
           position = camPos + velocity
           -- Delta pitch and yaw are the negation of the change in cursor
-          -- position according to the GLFW window.
+          -- position according to GLFW window co-ordinates.
           pitch = max (-pi / 2) . min (pi / 2)
                     . (+ (y - y') * cameraMouseSensitivity)
                     $ camPitch
