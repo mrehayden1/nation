@@ -10,9 +10,9 @@ import Foreign
 import Linear as L
 import qualified Graphics.Rendering.OpenGL as GL
 
+import Matrix
 import Camera as Cam
 import Render.Model
-import qualified Render.Matrix as M
 import Render.Pipeline
 import Render.Env
 import Render.Scene.Scene
@@ -46,18 +46,17 @@ createSceneRenderer shadowDepthMap = do
     GL.activeTexture $= GL.TextureUnit shadowMapTextureUnit
     GL.textureBinding GL.Texture2D $= Just shadowDepthMap
     -- Set view matrix
-    viewMatrix <- M.toGlMatrix .  Cam.toViewMatrix $ sceneCamera
+    viewMatrix <- toGlMatrix .  Cam.toViewMatrix $ sceneCamera
     pipelineUniform pipeline "viewM" $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set projection matrix
-    projection <- M.toGlMatrix . M.perspectiveProjection 0.1 100
-      . aspectRatio $ env
+    projection <- toGlMatrix . perspectiveProjection . aspectRatio $ env
     pipelineUniform pipeline "projectionM" $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set light projection matrix
-    lightProjection <- M.toGlMatrix M.directionalLightProjection
+    lightProjection <- toGlMatrix directionalLightProjection
     pipelineUniform pipeline "lightProjectionM"
       $= (lightProjection :: GL.GLmatrix GL.GLfloat)
     -- Set light view matrix
-    lightView <- M.toGlMatrix . M.directionalLightViewMatrix daylightPitch
+    lightView <- toGlMatrix . directionalLightViewMatrix daylightPitch
                    $ daylightYaw
     pipelineUniform pipeline "lightViewM"
       $= (lightView :: GL.GLmatrix GL.GLfloat)
@@ -103,11 +102,11 @@ createSceneRenderer shadowDepthMap = do
     pipelineUniform pipeline "doubleSided"
       $= (fromIntegral . fromEnum $ materialDoubleSided :: GL.GLint)
     -- Set model matrix
-    modelMatrix' <- M.toGlMatrix modelMatrix
+    modelMatrix' <- toGlMatrix modelMatrix
     pipelineUniform pipeline "modelM"
       $= (modelMatrix' :: GL.GLmatrix GL.GLfloat)
     -- Set normal matrix
-    normalMatrix <- M.toGlMatrix . m33_to_m44 . (^. _m33) . L.transpose
+    normalMatrix <- toGlMatrix . m33_to_m44 . (^. _m33) . L.transpose
       . inv44 $ modelMatrix
     pipelineUniform pipeline "normalM"
       $= (normalMatrix :: GL.GLmatrix GL.GLfloat)

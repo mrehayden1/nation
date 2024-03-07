@@ -5,9 +5,9 @@ module Render.Scene.Shadow (
 import Data.StateVar
 import Foreign.Ptr
 import qualified Graphics.Rendering.OpenGL as GL
-import Linear as L
+import Linear
 
-import Render.Matrix as M
+import Matrix
 import Render.Model
 import Render.Pipeline
 import Render.Scene.Scene
@@ -63,15 +63,15 @@ createShadowDepthMapper = do
     bindPipeline pipeline
     GL.bindFramebuffer GL.Framebuffer $= frameBuffer
     -- Set projection matrix
-    projection <- M.toGlMatrix directionalLightProjection
+    projection <- toGlMatrix directionalLightProjection
     pipelineUniform pipeline "projectionM"
       $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set view matrix
-    viewMatrix <- M.toGlMatrix . directionalLightViewMatrix daylightPitch
+    viewMatrix <- toGlMatrix . directionalLightViewMatrix daylightPitch
       $ daylightYaw
     pipelineUniform pipeline "viewM" $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set model matrix
-    model <- M.toGlMatrix (L.identity :: L.M44 GL.GLfloat)
+    model <- toGlMatrix (identity :: M44 GL.GLfloat)
     pipelineUniform pipeline "modelM" $= (model :: GL.GLmatrix GL.GLfloat)
     GL.viewport $= (
         GL.Position 0 0,
@@ -87,7 +87,7 @@ createShadowDepthMapper = do
   renderMeshPrimitive pipeline modelMatrix' MeshPrimitive{..} = do
     let Material{..} = meshPrimMaterial
     -- Set model matrix
-    modelMatrix <- M.toGlMatrix modelMatrix'
+    modelMatrix <- toGlMatrix modelMatrix'
     pipelineUniform pipeline "modelM"
       $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set albedo textures (for alpha testing)

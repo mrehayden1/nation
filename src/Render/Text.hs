@@ -17,9 +17,9 @@ import Foreign
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Linear as L
 
+import Matrix
 import Render.Env
 import Render.Element
-import qualified Render.Matrix as M
 import Render.Pipeline
 import Render.Shaders
 import Render.Text.Font.MSDF
@@ -66,7 +66,7 @@ createDebugTextRenderer = do
     bindPipeline pipeline
     -- Set projection matrix
     let projectionUniform = pipelineUniform pipeline "projectionM"
-    projectionM <- M.toGlMatrix . projection $ env
+    projectionM <- toGlMatrix . projection $ env
     projectionUniform $= (projectionM :: GL.GLmatrix GL.GLfloat)
     -- Bind Texture
     GL.activeTexture $= GL.TextureUnit 0
@@ -86,7 +86,7 @@ createDebugTextRenderer = do
     -- Set projection matrix
     -- TODO don't create the projection every render
     let projectionUniform = pipelineUniform pipeline "projectionM"
-    projectionM <- M.toGlMatrix . projection $ env
+    projectionM <- toGlMatrix . projection $ env
     projectionUniform $= (projectionM :: GL.GLmatrix GL.GLfloat)
     -- Bind VAO
     GL.bindVertexArrayObject $= Just textBgVao
@@ -104,7 +104,7 @@ createDebugTextRenderer = do
 
 -- createDebugText - positioned in "text space" with ems as the unit
 createDebugText :: MsdfFont -> Scale -> Origin -> String -> IO Text
-createDebugText font@MsdfFont{..} scale origin str = do
+createDebugText font@MsdfFont{..} scale' origin str = do
   let MsdfFontMeta{..} = meta
       sizeOfVertexUnit = sizeOf (undefined :: VertexUnit) :: Int
       glyphMap = unGlyphMap glyphs
@@ -159,7 +159,7 @@ createDebugText font@MsdfFont{..} scale origin str = do
   GL.bindVertexArrayObject $= Nothing
   GL.bindBuffer GL.ArrayBuffer $= Nothing
   GL.bindBuffer GL.ElementArrayBuffer $= Nothing
-  textBackground <- createTextBackground scale origin cursorX
+  textBackground <- createTextBackground scale' origin cursorX
   return $ Text {
       textFont = font,
       textVao = vao,
@@ -172,7 +172,7 @@ createDebugText font@MsdfFont{..} scale origin str = do
   numVertexElements = 4
 
   accumGlyphQuads (vss, cursor) g =
-    let (vs, cursor') = glyphQuad (metrics meta) scale cursor g
+    let (vs, cursor') = glyphQuad (metrics meta) scale' cursor g
     in (vss ++ vs, cursor')
 
   -- Create a quad for a glyph with the given horizontal offset and return the
@@ -219,7 +219,7 @@ createTextBackground :: Scale
   -> Origin
   -> VertexUnit
   -> IO TextBackground
-createTextBackground scale (x, y) x' = do
+createTextBackground scale' (x, y) x' = do
   let quad = [
           x , y ,
           x', y ,
@@ -229,7 +229,7 @@ createTextBackground scale (x, y) x' = do
           x', y'
         ]
       numVertexElems = 2
-      y' = y + scale
+      y' = y + scale'
       sizeOfVertexUnit = sizeOf (undefined :: VertexUnit) :: Int
   -- Create VAO
   vao <- GL.genObjectName

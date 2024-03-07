@@ -1,5 +1,6 @@
-module Render.Matrix (
+module Matrix (
   perspectiveProjection,
+  inversePerspectiveProjection,
 
   directionalLightProjection,
   directionalLightViewMatrix,
@@ -49,6 +50,13 @@ directionalLightProjection camera lightDirection =
     ( 1, -1, -1), ( 1, -1,  1), (-1, -1,  1), (-1, -1, -1)]
 -}
 
+-- The application global field of view angle (in degrees) and near and far
+-- clipping planes.
+far, fov, near :: Floating a => a
+far  = 1000
+fov  = 35
+near = 0.1
+
 -- Light direction points towards the (infinitely far away) light source
 directionalLightViewMatrix :: (Epsilon a, Floating a)
   => a
@@ -64,16 +72,20 @@ directionalLightViewMatrix pitch yaw =
       up     = right `L.cross` dir -- camera's up
   in L.lookAt (negate dir) centre up
 
-perspectiveProjection :: Floating a => a -> a -> a -> M44 a
-perspectiveProjection near far aspectRatio =
+perspectiveProjection :: Floating a => a -> M44 a
+perspectiveProjection aspectRatio =
   L.perspective (fov * pi / 180) aspectRatio near far
- where fov = 45
+
+inversePerspectiveProjection :: Floating a => a -> M44 a
+inversePerspectiveProjection aspectRatio =
+  L.inversePerspective (fov * pi / 180) aspectRatio near far
 
 scale :: Num a => V3 a -> M44 a
-scale (V3 x y z) = V4 (V4 x 0 0 0)
-                      (V4 0 y 0 0)
-                      (V4 0 0 z 0)
-                      (V4 0 0 0 1)
+scale (V3 x y z) =
+  V4 (V4 x 0 0 0)
+     (V4 0 y 0 0)
+     (V4 0 0 z 0)
+     (V4 0 0 0 1)
 
 translate :: Num a => V3 a -> M44 a
 translate (V3 x y z) =

@@ -28,6 +28,10 @@ import qualified Render.Scene.Shadow as Shadow
 appName :: String
 appName = "Nation"
 
+windowHeight', windowWidth' :: Int
+windowHeight' = 1080
+windowWidth' = 1920
+
 appEnv :: Env
 appEnv = Env {
   -- TODO Add debugging build flag?
@@ -35,13 +39,15 @@ appEnv = Env {
   debugInfoEnabledDefault = True,
   fullscreen = False,
   multisampleSubsamples = Msaa16x,
-  vsyncEnabled = False
+  vsyncEnabled = False,
+  windowHeight = windowHeight',
+  windowWidth = windowWidth'
 }
 
 renderEnv :: RenderEnv
 renderEnv = RenderEnv {
-  viewportHeight = 1080,
-  viewportWidth = 1920
+  viewportHeight = windowHeight',
+  viewportWidth = windowWidth'
 }
 
 main :: IO ()
@@ -60,8 +66,10 @@ main = do
     overlayDebugQuad <- createDebugQuadOverlayer shadowDepthMapTexture
     overlayDebugInfo <- createDebugInfoOverlayer timeRef
     overlayGizmo <- createDebugGizmoOverlayer
+    -- React to changes in our Reflex application
     let renderFrame frame@(Input{..}, Output{..}) = do
           let WorldState{..} = worldState
+              V3 pointerX pointerY pointerZ = pointerPosition
               scene = Scene.Scene {
                 sceneCamera = camera,
                 sceneElements = [
@@ -73,7 +81,7 @@ main = do
                   Scene.Element {
                     elementAnimation = Just ("spin", 5, animationTime),
                     elementModel = models ! Pointer,
-                    elementPosition = V3 (fst cursorPos / 50) 0 . (/50) . snd $ cursorPos
+                    elementPosition = pointerPosition
                   },
                   Scene.Element {
                     elementAnimation = Just ("Idle", 3, animationTime),
@@ -141,7 +149,6 @@ main = do
 initialise :: IO GLFW.Window
 initialise = do
   let Env{..} = appEnv
-      RenderEnv{..} = renderEnv
   r <- GLFW.init
   unless r (error "GLFW.init error.")
   GLFW.defaultWindowHints
@@ -158,7 +165,7 @@ initialise = do
   -- Create window
   monitor' <- if fullscreen then GLFW.getPrimaryMonitor else return Nothing
   window <- fmap (fromMaybe (error "GLFW failed to create window."))
-    . GLFW.createWindow viewportWidth viewportHeight appName monitor'
+    . GLFW.createWindow windowWidth windowHeight appName monitor'
     $ Nothing
   GLFW.makeContextCurrent (Just window)
   -- Enable console debugging output

@@ -25,7 +25,7 @@ import qualified Data.Vector as V
 import Linear as L
 import qualified Text.GLTF.Loader as G
 
-import Render.Matrix as M
+import Matrix
 import Render.Model.Model
 import Render.Model.GLTF
 
@@ -43,7 +43,7 @@ withRendererPosed :: Monad m
   -> Model
   -> m ()
 withRendererPosed render anim pos = traverse_ (nodeWithRenderer render)
-  . accumTransforms (M.translate pos) . _modelScene
+  . accumTransforms (translate pos) . _modelScene
  where
   nodeWithRenderer :: Monad m
     => (L.M44 Float -> MeshPrimitive -> m ())
@@ -61,7 +61,7 @@ withRendererPosed render anim pos = traverse_ (nodeWithRenderer render)
 
   nodeTransform :: SceneNode -> L.M44 Float
   nodeTransform SceneNode{..} =
-    let s = M.scale _nodeScale
+    let s = scale _nodeScale
         r = L.fromQuaternion _nodeRotation
         t = _nodeTranslation
         tr = L.mkTransformationMat r t

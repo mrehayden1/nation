@@ -5,10 +5,12 @@ module Camera (
 
   direction,
   right,
-  toViewMatrix
+
+  toViewMatrix,
+  toInverseViewMatrix
 ) where
 
-import qualified Linear as L
+import Linear
 
 -- Conventions for our Camera angles
 --
@@ -21,30 +23,33 @@ import qualified Linear as L
 -- TODO Investigate storing the camera state as a matrix.
 data Camera = Camera {
   camPitch :: !Float,
-  camPos :: !(L.V3 Float),
+  camPos :: !(V3 Float),
   camYaw :: !Float
 } deriving (Show)
 
 -- World up unit vector
-worldUp :: Floating a => L.V3 a
-worldUp = L.V3 0 1 0
+worldUp :: Floating a => V3 a
+worldUp = V3 0 1 0
 
 -- Directional unit vector of the camera given pitch and yaw
-direction :: Camera -> L.V3 Float
+direction :: Camera -> V3 Float
 direction Camera{..} =
   let x = cos camYaw * cos camPitch
       y = sin camPitch
       z = negate $ sin camYaw * cos camPitch
-  in L.normalize $ L.V3 x y z
+  in normalize $ V3 x y z
 
-right :: Camera -> L.V3 Float
-right Camera{..} = L.V3 (sin camYaw) 0 (cos camYaw)
+right :: Camera -> V3 Float
+right Camera{..} = V3 (sin camYaw) 0 (cos camYaw)
 
-toViewMatrix :: Camera -> L.M44 Float
+toViewMatrix :: Camera -> M44 Float
 toViewMatrix cam@Camera{..} =
   let dir    = direction cam
       -- the 'centre' to which the camera is looking
       centre = camPos + dir
       -- no camera roll so the camera is always on the x-z plane
-      up     = right cam `L.cross` dir -- camera's up
-  in L.lookAt camPos centre up
+      up     = right cam `cross` dir -- camera's up
+  in lookAt camPos centre up
+
+toInverseViewMatrix :: Camera -> M44 Float
+toInverseViewMatrix = inv44 . toViewMatrix

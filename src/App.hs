@@ -27,13 +27,14 @@ import Data.List (delete, insert)
 import Data.Time.Clock
 import Data.Tuple.Extra
 import qualified Graphics.UI.GLFW as GLFW
-import qualified Linear as L
+import Linear
 import Reflex
 import Reflex.Network
 
-import Camera (Camera(..))
+import Camera
 import qualified Camera as Cam
 import Cursor
+import Matrix
 
 data MsaaSubsamples = MsaaNone | Msaa2x | Msaa4x | Msaa8x | Msaa16x
   deriving (Eq, Enum)
@@ -44,7 +45,9 @@ data Env = Env {
   debugInfoEnabledDefault :: Bool,
   fullscreen :: Bool,
   -- TODO User savable settings
-  vsyncEnabled :: Bool
+  vsyncEnabled :: Bool,
+  windowHeight :: Int,
+  windowWidth :: Int
 }
 
 type Frame = (Input, Output)
@@ -78,7 +81,7 @@ data WorldState = WorldState {
   daylightAmbientIntensity :: Float,
   -- | Pointing at the sun
   playerPosition :: PlayerPosition,
-  pointerPosition:: CursorPosition,
+  pointerPosition :: V3 Float,
   sun :: Sun
 }
 
@@ -108,15 +111,16 @@ toggleDebugInfoKey = GLFW.Key'F3
 toggleDebugCameraKey :: GLFW.Key
 toggleDebugCameraKey = GLFW.Key'Backspace
 
-game :: forall t m. (Adjustable t m, MonadFix m, MonadHold t m,
-  MonadReader Env m)
-    => Event t Input
-    -> m (Dynamic t Frame)
+type App t a = forall m. (Adjustable t m, MonadFix m, MonadHold t m,
+  MonadReader Env m) => m a
+
+game :: forall t. Event t Input -> App t (Dynamic t Frame)
 game eInput = do
-  Env {..} <- ask
+  Env{..} <- ask
   delta <- holdDyn 0 . fmap deltaT $ eInput
   animationT <- foldDyn ((+) . realToFrac) 0 . fmap deltaT $ eInput
-  cursor <- holdDyn (0, 0) . fmap cursorPos $ eInput
+  let cursorE = fmap cursorPos eInput
+  cursor <- holdDyn (0, 0) cursorE
   let keyPresses = fmap (fmap fst3 . filter ((== GLFW.KeyState'Pressed) . snd3) . keys) eInput
   heldKeys <- foldDyn (flip (foldl (flip $ uncurry3 updateHeldKeys)) . keys) [] eInput
   shouldExit <- holdDyn False . fmap (const True) . ffilter (elem quitKey)
@@ -128,20 +132,21 @@ game eInput = do
     . ffilter (elem toggleDebugInfoKey)
     $ keyPresses
   playerPosition <- foldDyn (uncurry . flip $ updatePlayerPosition) playerStart
-    . gate (fmap not . current $ debugCameraOn)
-    . updated $ (,) <$> heldKeys <*> delta
+    . gate (fmap not . current $ debugCameraOn) . updated
+    $ (,) <$> heldKeys <*> delta
   let playerCamera = fmap (uncurry playerPositionCamera) playerPosition
   debugCam <- debugCamera delta playerCamera debugCameraOn heldKeys cursor
   let camera = debugCameraOn >>= \d -> if d then debugCam else playerCamera
   sunPitch <- foldDyn (uncurry updateSunPitch) (pi / 2) . updated
     $ (,) <$> delta <*> heldKeys
+  pointer <- makePointer cursorE camera
   let ambientLight = fmap ((* 1) . max 0 . sin) sunPitch
       worldState = WorldState
         <$> animationT
         <*> camera
         <*> ambientLight
         <*> playerPosition
-        <*> cursor
+        <*> pointer
         <*> (Sun <$> sunPitch <*> pure (pi / 8))
   let output = Output
         <$> shouldExit
@@ -162,11 +167,11 @@ game eInput = do
   playerPositionCamera :: Float -> Float -> Camera
   playerPositionCamera x z =
     let th = (3 * pi) / 8
-        h  = 30
+        h  = 40
     in Camera {
          camPitch = negate th,
          -- always look at the player position
-         camPos = L.V3 x h (z + h / tan th),
+         camPos = V3 x h (z + h / tan th),
          -- towards -z
          camYaw = pi / 2
        }
@@ -182,23 +187,23 @@ game eInput = do
 
   updatePlayerPosition :: DeltaT -> HeldKeys -> PlayerPosition -> PlayerPosition
   updatePlayerPosition dt keys (x, z) =
-    let (L.V3 dx _ dz) = (playerSpeed *) . (realToFrac dt *) . sum
+    let (V3 dx _ dz) = (playerSpeed *) . (realToFrac dt *) . sum
                            . fmap keyVelocity $ keys
     in (x + dx, z + dz)
    where
-    keyVelocity :: Floating a => GLFW.Key -> L.V3 a
-    keyVelocity GLFW.Key'W = L.V3   0   0 (-1)
-    keyVelocity GLFW.Key'A = L.V3 (-1)  0   0
-    keyVelocity GLFW.Key'S = L.V3   0   0   1
-    keyVelocity GLFW.Key'D = L.V3   1   0   0
-    keyVelocity _          = L.V3   0   0   0
+    keyVelocity :: Floating a => GLFW.Key -> V3 a
+    keyVelocity GLFW.Key'W = V3   0   0 (-1)
+    keyVelocity GLFW.Key'A = V3 (-1)  0   0
+    keyVelocity GLFW.Key'S = V3   0   0   1
+    keyVelocity GLFW.Key'D = V3   1   0   0
+    keyVelocity _          = V3   0   0   0
 
   debugCamera :: Dynamic t DeltaT
     -> Dynamic t Camera
     -> Dynamic t Bool
     -> Dynamic t HeldKeys
     -> Dynamic t CursorPosition
-    -> m (Dynamic t Camera)
+    -> App t (Dynamic t Camera)
   debugCamera delta playerCamera debugCameraOn heldKeys cursor = do
     -- Reset the debug camera to the last player camera position every time
     -- its toggled on.
@@ -209,7 +214,7 @@ game eInput = do
    where
     debugCameraPosition :: Camera
       -> Bool
-      -> m (Dynamic t Camera)
+      -> App t (Dynamic t Camera)
     debugCameraPosition camStart camOn = do
       s <- foldDyn (uncurry3 updateDebugCamera) ((0, 0), camStart)
        . gate (pure camOn)
@@ -243,9 +248,69 @@ game eInput = do
       -- TODO Move this somewhere easier to find
       cameraMouseSensitivity = 0.0015
 
-      keyVelocity :: GLFW.Key -> L.V3 Float
+      keyVelocity :: GLFW.Key -> V3 Float
       keyVelocity GLFW.Key'W = Cam.direction camera
       keyVelocity GLFW.Key'A = negate . Cam.right $ camera
       keyVelocity GLFW.Key'S = negate . Cam.direction $ camera
       keyVelocity GLFW.Key'D = Cam.right camera
-      keyVelocity _          = L.V3 0 0 0
+      keyVelocity _          = V3 0 0 0
+
+makePointer :: Event t CursorPosition -> Dynamic t Camera -> App t (Dynamic t (V3 Float))
+makePointer cursorE cameraD = do
+  Env{..} <- ask
+  cursorDelta <- fmap (fmap (uncurry $ flip (-)))
+                   . foldDyn (flip $ (,) . snd) (0, 0)
+                   . fmap (uncurry V2) $ cursorE
+  fmap (fmap snd)
+    . foldDyn (updatePointer windowWidth windowHeight) (0, 0)
+    . updated $ ((,) <$> cursorDelta <*> cameraD)
+ where
+  -- a pointer which remains within the bounds of a circle centered around the
+  -- middle of the player
+  updatePointer :: Int
+    -> Int
+    -> (V2 Float, Camera)
+    -> (V2 Float, V3 Float)
+    -> (V2 Float, V3 Float)
+  updatePointer w h (delta, camera) (screenPos, _) =
+    let screenPos' = screenPos + delta
+        p@(V3 x _ z) = worldPosition w h camera screenPos'
+    in if x**2 + z**2 <= r**2
+         then (screenPos', p)
+         else let p' = normalize p * pure r
+              -- project the new pointer position back into screen space and
+              -- use that to calculate future updates
+              in (screenPosition w h camera p', p')
+   where
+    r = 20
+
+  -- The game pointer world coordinates on the plane y = 0
+  worldPosition :: Int -> Int -> Camera -> V2 Float -> V3 Float
+  worldPosition screenWidth screenHeight camera (V2 cursorX cursorY) =
+    let w = realToFrac screenWidth
+        h = realToFrac screenHeight
+        persM' = inversePerspectiveProjection $ w / h
+        viewM' = inv44 . toViewMatrix $ camera
+        xNdc =  toNdc w cursorX
+        yNdc = -toNdc h cursorY
+        V4 viewX viewY _ _ = persM' !* V4 xNdc yNdc (-1) 1
+        V4 v1 v2 v3 _ = viewM' !* V4 viewX viewY (-1) 0
+        V3 a b c = camPos camera
+        -- Using the vector equation of the line `(x,y,z) = (a,b,c) + tv` we
+        -- solve t for y = 0 and calculate x and z
+        t = -b / v2
+        x = a + t * v1
+        z = c + t * v3
+    in V3 x 0 z
+   where
+    toNdc :: Float -> Float -> Float
+    toNdc d a = 2 * (a - (d/2)) / d
+
+  screenPosition :: Int -> Int -> Camera -> V3 Float -> V2 Float
+  screenPosition screenWidth screenHeight camera pos =
+    let width = realToFrac screenWidth
+        height = realToFrac screenHeight
+        persM = perspectiveProjection $ width / height
+        viewM = toViewMatrix camera
+        V4 x y _ w = persM !*! viewM !* point pos
+    in (V2 width height * (V2 (x / w) (-y / w) + 1)) / 2

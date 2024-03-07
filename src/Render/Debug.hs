@@ -15,16 +15,15 @@ import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
 import qualified Graphics.Rendering.OpenGL as GL
-import Linear (M44, (!*!))
-import qualified Linear as L
+import Linear
 import Text.Printf
 
 import App (DeltaT, Frame, Input(..), Output(..), WorldState(..))
 import Camera (Camera(..))
 import qualified Camera as Cam
+import Matrix
 import Render.Element
 import Render.Env
-import qualified Render.Matrix as M
 import Render.Model
 import Render.Pipeline
 import Render.Text
@@ -35,8 +34,6 @@ data FpsStatistics = FpsStatistics {
   fpsLow :: DeltaT,
   fpsHigh :: DeltaT
 }
-
-type AspectRatio = Float
 
 createDebugGizmoOverlayer :: IO (RenderEnv -> Camera -> IO ())
 createDebugGizmoOverlayer = do
@@ -51,15 +48,14 @@ createDebugGizmoOverlayer = do
   model <- fromGlbFile "assets/models/reference_frame.glb"
   return $ \env camera -> do
     bindPipeline pipeline
-    modelM <- M.toGlMatrix (L.identity :: L.M44 GL.GLfloat)
+    modelM <- toGlMatrix (identity :: M44 GL.GLfloat)
     modelMUniform $= modelM
-    let cameraViewM = Cam.toViewMatrix camera :: L.M44 GL.GLfloat
+    let cameraViewM = Cam.toViewMatrix camera :: M44 GL.GLfloat
     -- Make the view matrix translation fixed so the gizmo is always in view.
-    viewM <- M.toGlMatrix . (M.translate (L.V3 0 0 (-100)) !*!)
-               . set L.translation 0 $ cameraViewM
+    viewM <- toGlMatrix . (translate (V3 0 0 (-100)) !*!)
+               . set translation 0 $ cameraViewM
     viewMUniform $= viewM
-    projection <- M.toGlMatrix . M.perspectiveProjection 0.1 1000
-                    . aspectRatio $ env
+    projection <- toGlMatrix . perspectiveProjection . aspectRatio $ env
     projectionMUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     GL.clear [GL.DepthBuffer]
     withRenderer (renderMeshPrimitive pipeline) 0 model
@@ -69,7 +65,7 @@ createDebugGizmoOverlayer = do
   renderMeshPrimitive :: Pipeline -> M44 Float -> MeshPrimitive -> IO ()
   renderMeshPrimitive pipeline modelMatrix' MeshPrimitive{..} = do
     -- Set model matrix
-    modelMatrix <- M.toGlMatrix modelMatrix'
+    modelMatrix <- toGlMatrix modelMatrix'
     let modelMatrixUniform = pipelineUniform pipeline "modelM"
     modelMatrixUniform $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set textures
@@ -99,37 +95,23 @@ createDebugInfoOverlayer timeRef = do
     -> IO ()
   renderDebugText deltasRef fpsRef font renderText env (Input{..}, Output{..}) = do
     let WorldState{..} = worldState
-    time' <- readIORef timeRef
-    when (deltaT > 0) . modifyIORef deltasRef $ (deltaT :)
-    deltas <- readIORef deltasRef
-    modifyIORef fpsRef (maybe (Just (time', FpsStatistics 0 0 0)) Just)
-    (lastUpdated, _) <- fmap fromJust . readIORef $ fpsRef
-    -- Update the stored fps count every half second only if there are deltas
-    when ((not . null $ deltas) && floor (time' * 2) > (floor (lastUpdated * 2) :: Int)) $ do
-      let fpss = fmap recip deltas
-          n = length fpss
-          fpsSum = sum fpss
-          fpss' = List.sort fpss
-          mean = if fpsSum > 0
-                   then fpsSum / realToFrac n
-                   else 0
-          stats = FpsStatistics {
-                    fpsMean = mean,
-                    fpsLow = head fpss',
-                    fpsHigh = fpss' !! (n - 1)
-                  }
-      writeIORef fpsRef . Just $ (time', stats)
-      writeIORef deltasRef []
-    (_, fpsStats) <- fmap fromJust . readIORef $ fpsRef
-    renderLines $ [
+        Camera{..} = camera
+        V3 camX camY camZ = camPos
+        (cursorX, cursorY) = cursorPos
+        V3 pointerX pointerY pointerZ = pointerPosition
+    FpsStatistics{..} <- fpsStats
+    renderLines [
         -- FPS counter
-        printf "Frame rate",
-        printf "  mean  : %    dfps" (round . fpsMean $ fpsStats :: Int),
-        printf "  low   : %    dfps" (round . fpsLow $ fpsStats :: Int),
-        printf "  high  : %    dfps" (round . fpsHigh $ fpsStats :: Int),
+        printf "Frame rate: %  dfps (mean) %  dfps (low) %  dfps (high)" (round fpsMean :: Int) (round fpsLow :: Int) (round fpsHigh :: Int),
         -- Player position
-        uncurry (printf "Player: x% .5f y 0.00000 z% .5f") playerPosition
-      ] ++ cameraInfo camera
+        uncurry (printf "Player: x% .5f y 0.00000 z% .5f") playerPosition,
+        printf "Camera: x% .5f y% .5f z% .5f" camX camY camZ,
+        printf "        pitch% .1f yaw% .1f" (180 * camPitch / pi)
+          . (/ pi) . (* 180) $ camYaw,
+        --
+        printf "Cursor (screen) %.5f %.5f" cursorX cursorY,
+        printf "       (world)  %.5f %.5f %.5f" pointerX pointerY pointerZ
+      ]
    where
     renderLines :: [String] -> IO ()
     renderLines ls = do
@@ -149,14 +131,30 @@ createDebugInfoOverlayer timeRef = do
         renderText env t
         deleteText t
 
-    cameraInfo :: Camera -> [String]
-    cameraInfo Camera{..} =
-      let L.V3 x y z = camPos
-      in [
-        printf "Camera: x% .5f y% .5f z% .5f" x y z,
-        printf "        pitch% .1f yaw% .1f" (180 * camPitch / pi)
-          . (/ pi) . (* 180) $ camYaw
-      ]
+    fpsStats :: IO FpsStatistics
+    fpsStats = do
+      time' <- readIORef timeRef
+      when (deltaT > 0) . modifyIORef deltasRef $ (deltaT :)
+      deltas <- readIORef deltasRef
+      modifyIORef fpsRef (maybe (Just (time', FpsStatistics 0 0 0)) Just)
+      (lastUpdated, _) <- fmap fromJust . readIORef $ fpsRef
+      -- Update the stored fps count every half second only if there are deltas
+      when ((not . null $ deltas) && floor (time' * 2) > (floor (lastUpdated * 2) :: Int)) $ do
+        let fpss = fmap recip deltas
+            n = length fpss
+            fpsSum = sum fpss
+            fpss' = List.sort fpss
+            mean = if fpsSum > 0
+                     then fpsSum / realToFrac n
+                     else 0
+            stats = FpsStatistics {
+                      fpsMean = mean,
+                      fpsLow = head fpss',
+                      fpsHigh = fpss' !! (n - 1)
+                    }
+        writeIORef fpsRef . Just $ (time', stats)
+        writeIORef deltasRef []
+      fmap (snd . fromJust) . readIORef $ fpsRef
 
 createDebugQuadOverlayer :: GL.TextureObject -> IO (IO ())
 createDebugQuadOverlayer texture = do
