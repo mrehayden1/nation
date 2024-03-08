@@ -2,11 +2,19 @@
 in vec4 fragColor;
 in vec2 TexCoords;
 
-layout (binding = 0) uniform sampler2D albedoTexture;
+layout (binding = 0) uniform sampler2D baseColorTexture;
+
+uniform bool hasBaseColorTexture;
+
+uniform vec4 baseColorFactor;
 
 out vec4 FragColor;
 
 void main()
 {
-  FragColor = vec4(texture(albedoTexture, TexCoords).rgb, 1.0);
+  if (hasBaseColorTexture) {
+    FragColor = texture(baseColorTexture, TexCoords).rgba * baseColorFactor;
+  } else {
+    FragColor = baseColorFactor;
+  }
 }

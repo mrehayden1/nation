@@ -16,19 +16,19 @@ import Render.Model
 import Render.Pipeline
 import Render.Env
 import Render.Scene.Scene
-import Vector as V
+import Vector
 
 shadowMapTextureUnit :: Integral a => a
 shadowMapTextureUnit = 0
 
-albedoTextureUnit :: Integral a => a
-albedoTextureUnit = 1
+baseColorTextureUnit :: Integral a => a
+baseColorTextureUnit = 1
 
 metallicRoughnessTextureUnit :: Integral a => a
 metallicRoughnessTextureUnit = 2
 
-normalMapTextureUnit :: Integral a => a
-normalMapTextureUnit = 3
+normalTextureUnit :: Integral a => a
+normalTextureUnit = 3
 
 createSceneRenderer :: GL.TextureObject -> IO (RenderEnv -> Scene -> IO ())
 createSceneRenderer shadowDepthMap = do
@@ -64,9 +64,9 @@ createSceneRenderer shadowDepthMap = do
     pipelineUniform pipeline "ambientIntensity" $= daylightAmbientIntensity
     -- Set light direction
     pipelineUniform pipeline "lightDirection" $=
-      (V.toGlVector3 . V.cameraDirection daylightPitch $ daylightYaw)
+      (toGlVector3 . eulerDirection daylightPitch $ daylightYaw)
     -- Set camera position
-    pipelineUniform pipeline "camPos" $= (V.toGlVector3 . camPos $ sceneCamera)
+    pipelineUniform pipeline "camPos" $= (toGlVector3 . camPos $ sceneCamera)
     -- Render
     GL.viewport $= (
         GL.Position 0 0,
@@ -83,17 +83,22 @@ createSceneRenderer shadowDepthMap = do
   renderMeshPrimitive :: Pipeline -> M44 Float -> MeshPrimitive -> IO ()
   renderMeshPrimitive pipeline modelMatrix MeshPrimitive{..} = do
     let Material{..} = meshPrimMaterial
-    -- Textures
-    -- Set albedo textures
-    GL.activeTexture $= GL.TextureUnit albedoTextureUnit
-    GL.textureBinding GL.Texture2D $= Just materialBaseColorTexture
+    -- Base color
+    pipelineUniform pipeline "baseColorFactor"
+      $= toGlVector4 materialBaseColorFactor
+    pipelineUniform pipeline "hasBaseColorTexture"
+      $= maybe (0 :: GL.GLint) (const 1) materialBaseColorTexture
+    GL.activeTexture $= GL.TextureUnit baseColorTextureUnit
+    GL.textureBinding GL.Texture2D $= materialBaseColorTexture
     -- Set metallic/roughness texture
     GL.activeTexture $= GL.TextureUnit metallicRoughnessTextureUnit
-    GL.textureBinding GL.Texture2D $= Just materialMetallicRoughnessTexture
+    GL.textureBinding GL.Texture2D $= materialMetallicRoughnessTexture
     -- Set normal map
-    GL.activeTexture $= GL.TextureUnit normalMapTextureUnit
-    GL.textureBinding GL.Texture2D $= Just materialNormalMap
-    -- Uniforms
+    pipelineUniform pipeline "normalTextureScale" $= materialNormalTextureScale
+    pipelineUniform pipeline "hasNormalTexture"
+      $= maybe (0 :: GL.GLint) (const 1) materialNormalTexture
+    GL.activeTexture $= GL.TextureUnit normalTextureUnit
+    GL.textureBinding GL.Texture2D $= materialNormalTexture
     -- Alpha coverage
     pipelineUniform pipeline "alphaCutoff" $= materialAlphaCutoff
     pipelineUniform pipeline "alphaMode"
@@ -116,9 +121,9 @@ createSceneRenderer shadowDepthMap = do
       nullPtr
     -- Unbind
     GL.bindVertexArrayObject $= Nothing
-    GL.activeTexture $= GL.TextureUnit albedoTextureUnit
+    GL.activeTexture $= GL.TextureUnit baseColorTextureUnit
     GL.textureBinding GL.Texture2D $= Nothing
     GL.activeTexture $= GL.TextureUnit metallicRoughnessTextureUnit
     GL.textureBinding GL.Texture2D $= Nothing
-    GL.activeTexture $= GL.TextureUnit normalMapTextureUnit
+    GL.activeTexture $= GL.TextureUnit normalTextureUnit
     GL.textureBinding GL.Texture2D $= Nothing

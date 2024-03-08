@@ -28,6 +28,7 @@ import Render.Model
 import Render.Pipeline
 import Render.Text
 import Render.Util
+import Vector
 
 data FpsStatistics = FpsStatistics {
   fpsMean :: DeltaT,
@@ -64,14 +65,19 @@ createDebugGizmoOverlayer = do
  where
   renderMeshPrimitive :: Pipeline -> M44 Float -> MeshPrimitive -> IO ()
   renderMeshPrimitive pipeline modelMatrix' MeshPrimitive{..} = do
+    let Material{..} = meshPrimMaterial
     -- Set model matrix
     modelMatrix <- toGlMatrix modelMatrix'
     let modelMatrixUniform = pipelineUniform pipeline "modelM"
     modelMatrixUniform $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set textures
-    let texture = materialBaseColorTexture meshPrimMaterial
+    pipelineUniform pipeline "baseColorFactor"
+      $= toGlVector4 materialBaseColorFactor
+    --   Whether an base color texture is set
+    pipelineUniform pipeline "hasBaseColorTexture"
+      $= maybe (0 :: GL.GLint) (const 1) materialBaseColorTexture
     GL.activeTexture $= GL.TextureUnit 0
-    GL.textureBinding GL.Texture2D $= Just texture
+    GL.textureBinding GL.Texture2D $= materialBaseColorTexture
     -- Draw
     GL.bindVertexArrayObject $= Just meshPrimVao
     GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt

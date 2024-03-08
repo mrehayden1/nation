@@ -17,14 +17,11 @@ module Render.Model.Model (
   meshPrimitive,
 
   Material(..),
-  identityTexture,
   defaultBaseColorFactor,
-  defaultNormalMap,
   defaultMaterial
 ) where
 
 import Control.Lens
-import Codec.Picture
 import Data.Map (Map)
 import Data.StateVar
 import Data.Text (Text)
@@ -37,7 +34,6 @@ import Data.Word
 import Foreign
 import qualified Graphics.Rendering.OpenGL as GL
 import Linear
-import System.IO.Unsafe
 import qualified Text.GLTF.Loader as G
 
 import qualified Render.Texture as T
@@ -131,43 +127,26 @@ data Material = Material {
   materialAlphaMode :: G.MaterialAlphaMode,
   materialAlphaCutoff :: Float,
   materialBaseColorFactor :: V4 Float,
-  materialBaseColorTexture :: GL.TextureObject,
+  materialBaseColorTexture :: Maybe GL.TextureObject,
   materialDoubleSided :: Bool,
-  materialNormalMap :: GL.TextureObject,
-  materialNormalMapScale :: Float,
-  materialMetallicRoughnessTexture :: GL.TextureObject
+  materialMetallicRoughnessTexture :: Maybe GL.TextureObject,
+  materialNormalTexture :: Maybe GL.TextureObject,
+  materialNormalTextureScale :: Float
 }
-
-{-# NOINLINE identityTexture #-}
--- Multiplicative identity used when a material has no texture so we have
--- something to multiply the pbrBaseColorFactor by.
-identityTexture :: GL.TextureObject
-identityTexture =
-  let image = (Image 1 1 . SV.fromList $ [255, 255, 255]) :: Image PixelRGB8
-  in unsafePerformIO
-       . T.fromImage False (T.Nearest, Nothing) T.Nearest T.Repeat T.Repeat
-       $ image
 
 defaultBaseColorFactor :: Num a => V4 a
 defaultBaseColorFactor = 1
-
-defaultNormalMap :: GL.TextureObject
-defaultNormalMap =
-  let image = (Image 1 1 . SV.fromList $ [0, 0, 255]) :: Image PixelRGB8
-  in unsafePerformIO
-       . T.fromImage False (T.Nearest, Nothing) T.Nearest T.Repeat T.Repeat
-       $ image
 
 defaultMaterial :: Material
 defaultMaterial = Material {
     materialAlphaCutoff = 0.5,
     materialAlphaMode = G.Opaque,
     materialBaseColorFactor = defaultBaseColorFactor,
-    materialBaseColorTexture = identityTexture,
+    materialBaseColorTexture = Nothing,
     materialDoubleSided = False,
-    materialNormalMap = defaultNormalMap,
-    materialNormalMapScale = 1,
-    materialMetallicRoughnessTexture = identityTexture
+    materialMetallicRoughnessTexture = Nothing,
+    materialNormalTexture = Nothing,
+    materialNormalTextureScale = 1
   }
 
 $(makeLenses ''Model)

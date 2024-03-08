@@ -8,12 +8,19 @@ in vec2 TexCoords;
 out vec4 FragColor;
 
 layout (binding = 0) uniform sampler2D lightDepthMap;
-layout (binding = 1) uniform sampler2D albedoTexture;
+layout (binding = 1) uniform sampler2D baseColorTexture;
 layout (binding = 2) uniform sampler2D metallicRoughnessTexture;
-layout (binding = 3) uniform sampler2D normalMap;
+layout (binding = 3) uniform sampler2D normalTexture;
+
+uniform bool hasBaseColorTexture;
+uniform vec4 baseColorFactor;
+
+uniform bool hasNormalTexture;
+uniform float normalTextureScale;
 
 uniform int alphaMode;
 uniform float alphaCutoff;
+
 uniform float ambientIntensity;
 uniform vec3 camPos;
 uniform bool doubleSided;
@@ -102,13 +109,18 @@ void main()
 {
   vec3 lightColour = vec3(1.0f, 1.0f, 1.0f);
 
-  vec4 albedoRgba = texture(albedoTexture, TexCoords).rgba;
-  float alpha = albedoRgba.a;
-  vec3 albedo = albedoRgba.rgb;
+  vec3 baseColor;
 
-  // Alpha cut-off
-  if (alphaMode == ALPHA_MODE_MASK && alpha < alphaCutoff)
-    discard;
+  if (hasBaseColorTexture) {
+    vec4 baseColorRgba = texture(baseColorTexture, TexCoords) * baseColorFactor;
+    float alpha = baseColorRgba.a;
+    baseColor = baseColorRgba.rgb;
+    // Alpha cut-off
+    if (alphaMode == ALPHA_MODE_MASK && alpha < alphaCutoff)
+      discard;
+  } else {
+    baseColor = baseColorFactor.rgb;
+  }
 
   vec3 metallicRoughness = texture(metallicRoughnessTexture, TexCoords).rgb;
   float roughness = metallicRoughness.g;
@@ -117,19 +129,26 @@ void main()
   vec3 V = normalize(camPos - WorldPos);
   vec3 L = lightDirection;
   vec3 H = normalize(V + L);
-  vec3 radiance = lightColour * 1;
+  vec3 radiance = lightColour * 4;
+
+  vec3 N;
 
   // Normal mapping
-  vec3 N = texture(normalMap, TexCoords).rgb;
-  N = N * 2.0 - 1.0;
-  N = normalize(TBN * N);
+  if (hasNormalTexture) {
+    N = texture(normalTexture, TexCoords).rgb * normalTextureScale;
+    N = N * 2.0 - 1.0;
+    N = normalize(TBN * N);
+  } else {
+    N = Normal;
+  }
+
   if (doubleSided && dot(N, V) < 0.0)
     N = -N;
 
   // Cook-Torrance BRDF
   float NDF = DistributionGGX(N, H, roughness);
   float G   = GeometrySmith(N, V, L, roughness);
-  vec3 F0 = mix(vec3(0.04), albedo, metallic);
+  vec3 F0 = mix(vec3(0.04), baseColor, metallic);
   vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);
 
   vec3 kS = F;
@@ -142,10 +161,10 @@ void main()
 
   float NdotL = max(dot(N, L), 0.0);
   float shadow = ShadowCalculation(LightClipPos);
-  vec3 Lo = (1 - shadow) * (kD * albedo / PI + specular) * radiance * NdotL;
+  vec3 Lo = (1 - shadow) * (kD * baseColor / PI + specular) * radiance * NdotL;
 
   // TODO Ambient occlusion
-  vec3 ambient = ambientIntensity * lightColour * albedo;// * ao;
+  vec3 ambient = ambientIntensity * lightColour * baseColor;// * ao;
 
   vec3 lighting = ambient + Lo;
 

@@ -34,19 +34,17 @@ fromGlbFile pathname = do
 
 adaptMaterial :: Vector GL.TextureObject -> G.Material -> Material
 adaptMaterial textures G.Material{..} =
-  -- TODO Apply vertex color and baseColorFactor weights to baseColorTexture
   let colorFactor = maybe defaultBaseColorFactor G.pbrBaseColorFactor
                       materialPbrMetallicRoughness
       colorTexture =
-        maybe identityTexture ((textures !) . G.textureId)
+        fmap ((textures !) . G.textureId)
           $ G.pbrBaseColorTexture =<< materialPbrMetallicRoughness
   -- TODO Apply scaling factor to normal map
-      normalMap = maybe defaultNormalMap ((textures !) . G.normalTextureId)
-                    materialNormalTexture
+      normalMap = fmap ((textures !) . G.normalTextureId) materialNormalTexture
       normalMapScale = maybe 1 G.normalTextureScale materialNormalTexture
-  -- TODO Apply metallic roughness factors to metallicRoughnessTexture
+  -- TODO Apply metallic + roughness factors to metallicRoughnessTexture
       metallicRoughnessTexture =
-        maybe identityTexture ((textures !) . G.textureId)
+        fmap ((textures !) . G.textureId)
           $ G.pbrMetallicRoughnessTexture =<< materialPbrMetallicRoughness
   in Material {
        materialAlphaCutoff = materialAlphaCutoff,
@@ -54,7 +52,7 @@ adaptMaterial textures G.Material{..} =
        materialBaseColorFactor = colorFactor,
        materialBaseColorTexture = colorTexture,
        materialDoubleSided = materialDoubleSided,
-       materialNormalMap = normalMap,
-       materialNormalMapScale = normalMapScale,
+       materialNormalTexture = normalMap,
+       materialNormalTextureScale = normalMapScale,
        materialMetallicRoughnessTexture = metallicRoughnessTexture
     }
