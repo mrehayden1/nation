@@ -18,7 +18,9 @@ module Render.Model.Model (
 
   Material(..),
   defaultBaseColorFactor,
-  defaultMaterial
+  defaultMaterial,
+  defaultMetallicFactor,
+  defaultRoughnessFactor
 ) where
 
 import Control.Lens
@@ -35,8 +37,6 @@ import Foreign
 import qualified Graphics.Rendering.OpenGL as GL
 import Linear
 import qualified Text.GLTF.Loader as G
-
-import qualified Render.Texture as T
 
 data Model = Model {
   _modelScene :: Tree SceneNode
@@ -129,13 +129,25 @@ data Material = Material {
   materialBaseColorFactor :: V4 Float,
   materialBaseColorTexture :: Maybe GL.TextureObject,
   materialDoubleSided :: Bool,
+--materialEmissiveFactor :: Float,
+--materialEmissiveTexture :: Maybe GL.TextureObject,
+  materialMetallicFactor :: Float,
   materialMetallicRoughnessTexture :: Maybe GL.TextureObject,
   materialNormalTexture :: Maybe GL.TextureObject,
-  materialNormalTextureScale :: Float
+  materialNormalTextureScale :: Float,
+--materialOcclusionTexture :: Maybe GL.TextureObject,
+--materialOcclusionTextureStrength :: Float,
+  materialRoughnessFactor :: Float
 }
 
 defaultBaseColorFactor :: Num a => V4 a
 defaultBaseColorFactor = 1
+
+defaultMetallicFactor :: Float
+defaultMetallicFactor = 1
+
+defaultRoughnessFactor :: Float
+defaultRoughnessFactor = 1
 
 defaultMaterial :: Material
 defaultMaterial = Material {
@@ -144,9 +156,11 @@ defaultMaterial = Material {
     materialBaseColorFactor = defaultBaseColorFactor,
     materialBaseColorTexture = Nothing,
     materialDoubleSided = False,
+    materialMetallicFactor = defaultMetallicFactor,
     materialMetallicRoughnessTexture = Nothing,
     materialNormalTexture = Nothing,
-    materialNormalTextureScale = 1
+    materialNormalTextureScale = 1,
+    materialRoughnessFactor = 1
   }
 
 $(makeLenses ''Model)

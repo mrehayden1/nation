@@ -39,20 +39,24 @@ adaptMaterial textures G.Material{..} =
       colorTexture =
         fmap ((textures !) . G.textureId)
           $ G.pbrBaseColorTexture =<< materialPbrMetallicRoughness
-  -- TODO Apply scaling factor to normal map
       normalMap = fmap ((textures !) . G.normalTextureId) materialNormalTexture
       normalMapScale = maybe 1 G.normalTextureScale materialNormalTexture
-  -- TODO Apply metallic + roughness factors to metallicRoughnessTexture
       metallicRoughnessTexture =
         fmap ((textures !) . G.textureId)
           $ G.pbrMetallicRoughnessTexture =<< materialPbrMetallicRoughness
+      metallicFactor = maybe defaultMetallicFactor G.pbrMetallicFactor
+                         materialPbrMetallicRoughness
+      roughnessFactor = maybe defaultRoughnessFactor G.pbrRoughnessFactor
+                         materialPbrMetallicRoughness
   in Material {
        materialAlphaCutoff = materialAlphaCutoff,
        materialAlphaMode = materialAlphaMode,
        materialBaseColorFactor = colorFactor,
        materialBaseColorTexture = colorTexture,
        materialDoubleSided = materialDoubleSided,
+       materialMetallicFactor = metallicFactor,
+       materialMetallicRoughnessTexture = metallicRoughnessTexture,
        materialNormalTexture = normalMap,
        materialNormalTextureScale = normalMapScale,
-       materialMetallicRoughnessTexture = metallicRoughnessTexture
+       materialRoughnessFactor = roughnessFactor
     }

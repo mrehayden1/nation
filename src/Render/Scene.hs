@@ -90,10 +90,14 @@ createSceneRenderer shadowDepthMap = do
       $= maybe (0 :: GL.GLint) (const 1) materialBaseColorTexture
     GL.activeTexture $= GL.TextureUnit baseColorTextureUnit
     GL.textureBinding GL.Texture2D $= materialBaseColorTexture
-    -- Set metallic/roughness texture
+    -- Metallic/roughness
+    pipelineUniform pipeline "metallicFactor" $= materialMetallicFactor
+    pipelineUniform pipeline "roughnessFactor" $= materialRoughnessFactor
+    pipelineUniform pipeline "hasMetallicRoughnessTexture"
+      $= maybe (0 :: GL.GLint) (const 1) materialMetallicRoughnessTexture
     GL.activeTexture $= GL.TextureUnit metallicRoughnessTextureUnit
     GL.textureBinding GL.Texture2D $= materialMetallicRoughnessTexture
-    -- Set normal map
+    -- Normal mapping
     pipelineUniform pipeline "normalTextureScale" $= materialNormalTextureScale
     pipelineUniform pipeline "hasNormalTexture"
       $= maybe (0 :: GL.GLint) (const 1) materialNormalTexture

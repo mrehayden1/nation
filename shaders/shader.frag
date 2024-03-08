@@ -14,12 +14,15 @@ layout (binding = 3) uniform sampler2D normalTexture;
 
 uniform bool hasBaseColorTexture;
 uniform vec4 baseColorFactor;
+uniform int alphaMode;
+uniform float alphaCutoff;
+
+uniform bool hasMetallicRoughnessTexture;
+uniform float metallicFactor;
+uniform float roughnessFactor;
 
 uniform bool hasNormalTexture;
 uniform float normalTextureScale;
-
-uniform int alphaMode;
-uniform float alphaCutoff;
 
 uniform float ambientIntensity;
 uniform vec3 camPos;
@@ -95,6 +98,7 @@ float GeometrySchlickGGX(float NdotV, float roughness)
 
   return num / denom;
 }
+
 float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 {
   float NdotV = max(dot(N, V), 0.0);
@@ -122,9 +126,16 @@ void main()
     baseColor = baseColorFactor.rgb;
   }
 
-  vec3 metallicRoughness = texture(metallicRoughnessTexture, TexCoords).rgb;
-  float roughness = metallicRoughness.g;
-  float metallic = metallicRoughness.b;
+  float roughness, metallic;
+
+  if (hasMetallicRoughnessTexture) {
+    vec3 metallicRoughness = texture(metallicRoughnessTexture, TexCoords).rgb;
+    roughness = metallicRoughness.g;
+    metallic = metallicRoughness.b;
+  } else {
+    roughness = roughnessFactor;
+    metallic = metallicFactor;
+  }
 
   vec3 V = normalize(camPos - WorldPos);
   vec3 L = lightDirection;
