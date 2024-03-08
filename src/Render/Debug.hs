@@ -108,7 +108,11 @@ createDebugInfoOverlayer timeRef = do
     FpsStatistics{..} <- fpsStats
     renderLines [
         -- FPS counter
-        printf "Frame rate: %  dfps (mean) %  dfps (low) %  dfps (high)" (round fpsMean :: Int) (round fpsLow :: Int) (round fpsHigh :: Int),
+        printf
+          "Frame rate: %  dfps (mean) %  dfps (low) %  dfps (high)"
+          (round fpsMean :: Int)
+          (round fpsLow :: Int)
+          (round fpsHigh :: Int),
         -- Player position
         uncurry (printf "Player: x% .5f y 0.00000 z% .5f") playerPosition,
         printf "Camera: x% .5f y% .5f z% .5f" camX camY camZ,

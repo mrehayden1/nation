@@ -137,10 +137,10 @@ game eInput = do
   debugInfoOn <- toggle debugInfoEnabledDefault
     . ffilter (elem toggleDebugInfoKey)
     $ keyPresses
-  playerPosition <- foldDyn (uncurry . flip $ updatePlayerPosition) playerStart
-    . gate (fmap not . current $ debugCameraOn) . updated
-    $ (,) <$> heldKeys <*> delta
-  let playerCamera = fmap (uncurry playerPositionCamera) playerPosition
+  -- Player position
+  let playerPosition = pure playerStart
+  -- Camera
+      playerCamera = fmap (uncurry playerPositionCamera) playerPosition
   debugCam <- debugCamera delta playerCamera debugCameraOn heldKeys cursor
   let camera = debugCameraOn >>= \d -> if d then debugCam else playerCamera
   sunPitch <- foldDyn (uncurry updateSunPitch) (pi / 2) . updated
@@ -166,7 +166,7 @@ game eInput = do
         <*> worldState
   -- Return the current input with the output.
   -- We can use undefined for the initial value because output is never
-  -- produced until there has been an actual input.
+  -- produced until there has been an input.
   input <- holdDyn undefined eInput
   return $ (,) <$> input <*> output
  where

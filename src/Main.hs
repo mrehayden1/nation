@@ -115,12 +115,12 @@ main = do
       (eTick, tickTrigger) <- newTriggerEvent
       -- Collect up the pressed keys during the current tick resetting them
       -- when the next tick comes
-      let keys = foldDyn (:) [] . fmap (\(k, _, s, m) -> (k, s, m))
-      keys' <- networkHold (return $ pure []) $ keys key <$ eTick
+      let keysD = foldDyn (:) [] . fmap (\(k, _, s, m) -> (k, s, m))
+      keysE <- networkHold (return $ pure []) $ keysD key <$ eTick
       let buttons = foldDyn (:) [] . fmap (\(b, s, m) -> (b, s, m))
-      buttons' <- networkHold (return $ pure []) $ buttons mouseButton <$ eTick
+      buttonsE <- networkHold (return $ pure []) $ buttons mouseButton <$ eTick
       let eInput = attachPromptlyDynWith uncurry
-                     (Input <$> cursorPos <*> join buttons' <*> join keys')
+                     (Input <$> cursorPos <*> join buttonsE <*> join keysE)
             . leftmost $ [(time, 0) <$ ePostBuild, eTick]
       eFrame <- fmap updated . flip runReaderT appEnv . game $ eInput
       let eShouldExit = void . ffilter id . fmap (shouldExit . snd) $ eFrame
