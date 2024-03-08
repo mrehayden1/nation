@@ -103,7 +103,7 @@ createDebugInfoOverlayer timeRef = do
     let WorldState{..} = worldState
         Camera{..} = camera
         V3 camX camY camZ = camPos
-        (cursorX, cursorY) = cursorPos
+        (cursorX, cursorY) = inputCursorPos
         V3 pointerX pointerY pointerZ = pointerPosition
     FpsStatistics{..} <- fpsStats
     renderLines [
@@ -114,9 +114,15 @@ createDebugInfoOverlayer timeRef = do
         printf "Camera: x% .5f y% .5f z% .5f" camX camY camZ,
         printf "        pitch% .1f yaw% .1f" (180 * camPitch / pi)
           . (/ pi) . (* 180) $ camYaw,
-        --
+        -- Keys
+        printf "Held keys: %s" . List.intercalate ", "
+          . fmap (drop 4 . show) $ outputKeys,
+        -- Cursor stuff (temp?)
         printf "Cursor (screen) %.5f %.5f" cursorX cursorY,
-        printf "       (world)  %.5f %.5f %.5f" pointerX pointerY pointerZ
+        printf "       (world)  %.5f %.5f %.5f" pointerX pointerY pointerZ,
+        -- Mouse buttons
+        printf "Held buttons: %s" . List.intercalate ", "
+          . fmap (drop 12 . show) $ outputMouseButtons
       ]
    where
     renderLines :: [String] -> IO ()
@@ -140,7 +146,7 @@ createDebugInfoOverlayer timeRef = do
     fpsStats :: IO FpsStatistics
     fpsStats = do
       time' <- readIORef timeRef
-      when (deltaT > 0) . modifyIORef deltasRef $ (deltaT :)
+      when (inputDeltaT > 0) . modifyIORef deltasRef $ (inputDeltaT :)
       deltas <- readIORef deltasRef
       modifyIORef fpsRef (maybe (Just (time', FpsStatistics 0 0 0)) Just)
       (lastUpdated, _) <- fmap fromJust . readIORef $ fpsRef

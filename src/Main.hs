@@ -117,8 +117,11 @@ main = do
       -- when the next tick comes
       let keys = foldDyn (:) [] . fmap (\(k, _, s, m) -> (k, s, m))
       keys' <- networkHold (return $ pure []) $ keys key <$ eTick
-      let eInput = attachPromptlyDynWith uncurry (Input <$> cursorPos <*> join keys')
-                    . leftmost $ [(time, 0) <$ ePostBuild, eTick]
+      let buttons = foldDyn (:) [] . fmap (\(b, s, m) -> (b, s, m))
+      buttons' <- networkHold (return $ pure []) $ buttons mouseButton <$ eTick
+      let eInput = attachPromptlyDynWith uncurry
+                     (Input <$> cursorPos <*> join buttons' <*> join keys')
+            . leftmost $ [(time, 0) <$ ePostBuild, eTick]
       eFrame <- fmap updated . flip runReaderT appEnv . game $ eInput
       let eShouldExit = void . ffilter id . fmap (shouldExit . snd) $ eFrame
           eShutdown = leftmost [eShouldExit, windowClose]

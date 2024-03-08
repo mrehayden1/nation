@@ -53,17 +53,19 @@ data Env = Env {
 type Frame = (Input, Output)
 
 data Input = Input {
-  cursorPos :: CursorPosition,
-  keys :: [(GLFW.Key, GLFW.KeyState, GLFW.ModifierKeys)],
-  time :: Time,
-  deltaT :: DeltaT
+  inputCursorPos :: CursorPosition,
+  inputMouseButtons :: [(GLFW.MouseButton, GLFW.MouseButtonState, GLFW.ModifierKeys)],
+  inputKeys :: [(GLFW.Key, GLFW.KeyState, GLFW.ModifierKeys)],
+  inputTime :: Time,
+  inputDeltaT :: DeltaT
 } deriving (Show)
 
 type Time = NominalDiffTime
 type DeltaT = NominalDiffTime
-type HeldKeys = [GLFW.Key]
 
 data Output = Output {
+  outputKeys :: [GLFW.Key],
+  outputMouseButtons :: [GLFW.MouseButton],
   shouldExit :: Bool,
   shouldOverlayLightDepthQuad :: Bool,
   shouldOverlayDebugInfo :: Bool,
@@ -117,12 +119,16 @@ type App t a = forall m. (Adjustable t m, MonadFix m, MonadHold t m,
 game :: forall t. Event t Input -> App t (Dynamic t Frame)
 game eInput = do
   Env{..} <- ask
-  delta <- holdDyn 0 . fmap deltaT $ eInput
-  animationT <- foldDyn ((+) . realToFrac) 0 . fmap deltaT $ eInput
-  let cursorE = fmap cursorPos eInput
+  delta <- holdDyn 0 . fmap inputDeltaT $ eInput
+  animationT <- foldDyn ((+) . realToFrac) 0 . fmap inputDeltaT $ eInput
+  -- Keys
+  (keyPresses, heldKeys) <- keys eInput
+  -- Click
+  mouseButtons <- buttons eInput
+  -- Cursor window position
+  let cursorE = fmap inputCursorPos eInput
   cursor <- holdDyn (0, 0) cursorE
-  let keyPresses = fmap (fmap fst3 . filter ((== GLFW.KeyState'Pressed) . snd3) . keys) eInput
-  heldKeys <- foldDyn (flip (foldl (flip $ uncurry3 updateHeldKeys)) . keys) [] eInput
+  -- Shortcuts
   shouldExit <- holdDyn False . fmap (const True) . ffilter (elem quitKey)
     $ keyPresses
   overlayQuad <- toggle False . ffilter (elem toggleDebugQuadKey) $ keyPresses
@@ -139,8 +145,11 @@ game eInput = do
   let camera = debugCameraOn >>= \d -> if d then debugCam else playerCamera
   sunPitch <- foldDyn (uncurry updateSunPitch) (pi / 2) . updated
     $ (,) <$> delta <*> heldKeys
-  pointerD <- pointer cursorE camera
+  -- Pointer
+  pointerD <- pointer cursorE playerCamera
+  -- Lighting
   let ambientLight = fmap ((* 1) . max 0 . sin) sunPitch
+  -- Output
       worldState = WorldState
         <$> animationT
         <*> camera
@@ -149,7 +158,9 @@ game eInput = do
         <*> pointerD
         <*> (Sun <$> sunPitch <*> pure (pi / 8))
   let output = Output
-        <$> shouldExit
+        <$> heldKeys
+        <*> mouseButtons
+        <*> shouldExit
         <*> overlayQuad
         <*> debugInfoOn
         <*> worldState
@@ -159,11 +170,6 @@ game eInput = do
   input <- holdDyn undefined eInput
   return $ (,) <$> input <*> output
  where
-  updateHeldKeys :: GLFW.Key -> GLFW.KeyState -> GLFW.ModifierKeys -> [GLFW.Key] -> [GLFW.Key]
-  updateHeldKeys k GLFW.KeyState'Pressed  _ ks = insert k ks
-  updateHeldKeys k GLFW.KeyState'Released _ ks = delete k ks
-  updateHeldKeys _ _                      _ ks = ks
-
   playerPositionCamera :: Float -> Float -> Camera
   playerPositionCamera x z =
     let th = (3 * pi) / 8
@@ -176,8 +182,8 @@ game eInput = do
          camYaw = pi / 2
        }
 
-  updateSunPitch :: DeltaT -> HeldKeys -> Float -> Float
-  updateSunPitch dt keys pitch = (+ pitch) . sum . fmap keyChange $ keys
+  updateSunPitch :: DeltaT -> [GLFW.Key] -> Float -> Float
+  updateSunPitch dt ks pitch = (+ pitch) . sum . fmap keyChange $ ks
    where
     keyChange GLFW.Key'Equal = angularVelocity * realToFrac dt
     keyChange GLFW.Key'Minus = negate angularVelocity * realToFrac dt
@@ -185,10 +191,10 @@ game eInput = do
     -- Radians per second
     angularVelocity = 1
 
-  updatePlayerPosition :: DeltaT -> HeldKeys -> PlayerPosition -> PlayerPosition
-  updatePlayerPosition dt keys (x, z) =
+  updatePlayerPosition :: DeltaT -> [GLFW.Key] -> PlayerPosition -> PlayerPosition
+  updatePlayerPosition dt ks (x, z) =
     let (V3 dx _ dz) = (playerSpeed *) . (realToFrac dt *) . sum
-                           . fmap keyVelocity $ keys
+                           . fmap keyVelocity $ ks
     in (x + dx, z + dz)
    where
     keyVelocity :: Floating a => GLFW.Key -> V3 a
@@ -201,7 +207,7 @@ game eInput = do
   debugCamera :: Dynamic t DeltaT
     -> Dynamic t Camera
     -> Dynamic t Bool
-    -> Dynamic t HeldKeys
+    -> Dynamic t [GLFW.Key]
     -> Dynamic t CursorPosition
     -> App t (Dynamic t Camera)
   debugCamera delta playerCamera debugCameraOn heldKeys cursor = do
@@ -223,13 +229,13 @@ game eInput = do
       return $ fmap snd s
 
     updateDebugCamera :: DeltaT
-      -> HeldKeys
+      -> [GLFW.Key]
       -> CursorPosition
       -> (CursorPosition, Camera)
       -> (CursorPosition, Camera)
-    updateDebugCamera deltaT keys (x', y') ((x, y), camera@Camera{..}) =
+    updateDebugCamera deltaT ks (x', y') ((x, y), camera@Camera{..}) =
       let velocity = pure debugCameraSpeed * realToFrac deltaT
-                       * (sum . map keyVelocity $ keys)
+                       * (sum . map keyVelocity $ ks)
           position = camPos + velocity
           -- Delta pitch and yaw are the negation of the change in cursor
           -- position according to GLFW window co-ordinates.
@@ -254,6 +260,40 @@ game eInput = do
       keyVelocity GLFW.Key'S = negate . Cam.direction $ camera
       keyVelocity GLFW.Key'D = Cam.right camera
       keyVelocity _          = V3 0 0 0
+
+
+keys :: Event t Input -> App t (Event t [GLFW.Key], Dynamic t [GLFW.Key])
+keys eInput = do
+  let keyPresses =
+        fmap
+          (fmap fst3 . filter ((== GLFW.KeyState'Pressed) . snd3) . inputKeys)
+          eInput
+  heldKeys <- foldDyn
+    (flip (foldl (flip $ uncurry3 updateHeldKeys)) . inputKeys)
+    []
+    eInput
+  return (keyPresses, heldKeys)
+ where
+  updateHeldKeys :: GLFW.Key
+    -> GLFW.KeyState
+    -> GLFW.ModifierKeys
+    -> [GLFW.Key]
+    -> [GLFW.Key]
+  updateHeldKeys k GLFW.KeyState'Pressed  _ ks = insert k ks
+  updateHeldKeys k GLFW.KeyState'Released _ ks = delete k ks
+  updateHeldKeys _ _                      _ ks = ks
+
+buttons :: Event t Input -> App t (Dynamic t [GLFW.MouseButton])
+buttons =
+  foldDyn (flip (foldl (flip $ uncurry3 updateHeldButtons)) . inputMouseButtons) []
+ where
+  updateHeldButtons :: GLFW.MouseButton
+    -> GLFW.MouseButtonState
+    -> GLFW.ModifierKeys
+    -> [GLFW.MouseButton]
+    -> [GLFW.MouseButton]
+  updateHeldButtons b GLFW.MouseButtonState'Pressed  _ bs = insert b bs
+  updateHeldButtons b GLFW.MouseButtonState'Released _ bs = delete b bs
 
 pointer :: Event t CursorPosition -> Dynamic t Camera -> App t (Dynamic t (V3 Float))
 pointer cursorE cameraD = do
