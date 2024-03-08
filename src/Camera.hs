@@ -11,6 +11,7 @@ module Camera (
 ) where
 
 import Linear
+import Vector
 
 -- Conventions for our Camera angles
 --
@@ -33,11 +34,7 @@ worldUp = V3 0 1 0
 
 -- Directional unit vector of the camera given pitch and yaw
 direction :: Camera -> V3 Float
-direction Camera{..} =
-  let x = cos camYaw * cos camPitch
-      y = sin camPitch
-      z = negate $ sin camYaw * cos camPitch
-  in normalize $ V3 x y z
+direction Camera{..} = eulerDirection camPitch camYaw
 
 right :: Camera -> V3 Float
 right Camera{..} = V3 (sin camYaw) 0 (cos camYaw)

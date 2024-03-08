@@ -64,7 +64,7 @@ directionalLightViewMatrix :: (Epsilon a, Floating a)
   -> M44 a
 directionalLightViewMatrix pitch yaw =
   -- TODO Make a function of the camera view
-  let dir    = cameraDirection pitch yaw
+  let dir    = eulerDirection pitch yaw
       -- the 'centre' to which the camera is looking
       centre = V3 0 0 0
       -- no camera roll so the camera is always on the x-z plane

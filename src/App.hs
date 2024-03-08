@@ -139,14 +139,14 @@ game eInput = do
   let camera = debugCameraOn >>= \d -> if d then debugCam else playerCamera
   sunPitch <- foldDyn (uncurry updateSunPitch) (pi / 2) . updated
     $ (,) <$> delta <*> heldKeys
-  pointer <- makePointer cursorE camera
+  pointerD <- pointer cursorE camera
   let ambientLight = fmap ((* 1) . max 0 . sin) sunPitch
       worldState = WorldState
         <$> animationT
         <*> camera
         <*> ambientLight
         <*> playerPosition
-        <*> pointer
+        <*> pointerD
         <*> (Sun <$> sunPitch <*> pure (pi / 8))
   let output = Output
         <$> shouldExit
@@ -255,8 +255,8 @@ game eInput = do
       keyVelocity GLFW.Key'D = Cam.right camera
       keyVelocity _          = V3 0 0 0
 
-makePointer :: Event t CursorPosition -> Dynamic t Camera -> App t (Dynamic t (V3 Float))
-makePointer cursorE cameraD = do
+pointer :: Event t CursorPosition -> Dynamic t Camera -> App t (Dynamic t (V3 Float))
+pointer cursorE cameraD = do
   Env{..} <- ask
   cursorDelta <- fmap (fmap (uncurry $ flip (-)))
                    . foldDyn (flip $ (,) . snd) (0, 0)
@@ -304,7 +304,7 @@ makePointer cursorE cameraD = do
     in V3 x 0 z
    where
     toNdc :: Float -> Float -> Float
-    toNdc d a = 2 * (a - (d/2)) / d
+    toNdc d a = 2 * (a - (d / 2)) / d
 
   screenPosition :: Int -> Int -> Camera -> V3 Float -> V2 Float
   screenPosition screenWidth screenHeight camera pos =
