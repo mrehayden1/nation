@@ -11,4 +11,10 @@
 [] Alpha coverage opaque mode
 [x] Normal map scaling
 [x] Handle missing normal maps correctly (default 1px normal map is causing tangent seams)
-[] Shader bugs
+[] Ambient occlusion textures
+[] Emissive textures
+[] Shader bugs(?)
+
+### Animations
+[] Keyframe interpolation
+[] Skinned meshes
