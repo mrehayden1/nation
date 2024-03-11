@@ -40,7 +40,7 @@ import qualified Text.GLTF.Loader as G
 
 data Model = Model {
   _modelScene :: Tree SceneNode
-}
+} deriving (Show)
 
 -- TODO Do we need to increase strictness so all data loads ahead of render?
 data SceneNode = SceneNode {
@@ -50,7 +50,7 @@ data SceneNode = SceneNode {
   _nodeRotation :: Quaternion Float,
   _nodeScale :: V3 Float,
   _nodeTranslation :: V3 Float
-}
+} deriving (Show)
 
 type Mesh = Vector MeshPrimitive
 
@@ -61,7 +61,7 @@ data MeshPrimitive = MeshPrimitive {
   meshPrimVbo :: [GL.BufferObject],
   meshPrimEbo :: GL.BufferObject,
   meshPrimNumIndices :: GL.NumArrayIndices
-}
+} deriving (Show)
 
 type Indices = Vector Word32
 type Positions = Vector (V3 Float)
@@ -138,7 +138,7 @@ data Material = Material {
 --materialOcclusionTexture :: Maybe GL.TextureObject,
 --materialOcclusionTextureStrength :: Float,
   materialRoughnessFactor :: Float
-}
+} deriving (Show)
 
 defaultBaseColorFactor :: Num a => V4 a
 defaultBaseColorFactor = 1

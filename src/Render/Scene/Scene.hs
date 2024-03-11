@@ -25,7 +25,8 @@ data Daylight = Daylight {
 data Element = Element {
   elementAnimation :: Maybe Animation,
   elementModel :: Model,
-  elementPosition :: V3 Float
+  elementPosition :: V3 Float,
+  elementRotation :: Quaternion Float
 }
 
 type Animation = (AnimationName, AnimationDuration, AnimationTime)

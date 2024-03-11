@@ -19,13 +19,12 @@ import qualified Linear as L
 
 import Matrix
 import Render.Env
-import Render.Element
 import Render.Pipeline
 import Render.Shaders
 import Render.Text.Font.MSDF
 import Render.Util
 
-type Origin = (VertexUnit, VertexUnit)
+type Origin = (GL.GLfloat, GL.GLfloat)
 type Scale = Float
 
 data Text = Text {
@@ -106,7 +105,7 @@ createDebugTextRenderer = do
 createDebugText :: MsdfFont -> Scale -> Origin -> String -> IO Text
 createDebugText font@MsdfFont{..} scale' origin str = do
   let MsdfFontMeta{..} = meta
-      sizeOfVertexUnit = sizeOf (undefined :: VertexUnit) :: Int
+      sizeOfVertexUnit = sizeOf (undefined :: GL.GLfloat) :: Int
       glyphMap = unGlyphMap glyphs
   -- Create glyph quad vertices with the following layout
   -- Position  Texture co-ords
@@ -177,19 +176,23 @@ createDebugText font@MsdfFont{..} scale' origin str = do
 
   -- Create a quad for a glyph with the given horizontal offset and return the
   -- new offset for the cursor.
-  glyphQuad :: FontMetrics -> Scale -> Origin -> Glyph -> (Vertices, Origin)
+  glyphQuad :: FontMetrics
+    -> Scale
+    -> Origin
+    -> Glyph
+    -> ([GL.GLfloat], Origin)
   glyphQuad FontMetrics{..} s (x, y) Glyph{..} =
     let x' = x + s * advance
     -- TODO Create a default quad for unknown glyphs
     in (maybe [] vertices bounds, (x', y))
    where
-    vertices :: GlyphBounds -> [VertexUnit]
+    vertices :: GlyphBounds -> [GL.GLfloat]
     vertices GlyphBounds{..} =
       concat . zipWith (++) (vertexPositions planeBounds)
         . (textureCoordinates . atlas $ meta)
         $ atlasBounds
 
-    vertexPositions :: Bounds -> [Vertices]
+    vertexPositions :: Bounds -> [[GL.GLfloat]]
     vertexPositions Bounds{..} = [
         [x + s * left , y + s * (bottom - descender)],
         [x + s * right, y + s * (bottom - descender)],
@@ -197,7 +200,7 @@ createDebugText font@MsdfFont{..} scale' origin str = do
         [x + s * right, y + s * (top    - descender)]
       ]
 
-    textureCoordinates :: FontAtlasMeta -> Bounds -> [Vertices]
+    textureCoordinates :: FontAtlasMeta -> Bounds -> [[GL.GLfloat]]
     textureCoordinates FontAtlasMeta{..} Bounds{..} =
       let width'  = realToFrac width
           height' = realToFrac height
@@ -217,7 +220,7 @@ createDebugText font@MsdfFont{..} scale' origin str = do
 
 createTextBackground :: Scale
   -> Origin
-  -> VertexUnit
+  -> GL.GLfloat
   -> IO TextBackground
 createTextBackground scale' (x, y) x' = do
   let quad = [
@@ -230,7 +233,7 @@ createTextBackground scale' (x, y) x' = do
         ]
       numVertexElems = 2
       y' = y + scale'
-      sizeOfVertexUnit = sizeOf (undefined :: VertexUnit) :: Int
+      sizeOfVertexUnit = sizeOf (undefined :: GL.GLfloat) :: Int
   -- Create VAO
   vao <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vao

@@ -74,7 +74,7 @@ createSceneRenderer shadowDepthMap = do
       )
     GL.clear [GL.ColorBuffer, GL.DepthBuffer]
     mapM_ (withRendererPosed (renderMeshPrimitive pipeline)
-             <$> elementAnimation <*> elementPosition <*> elementModel)
+             <$> elementAnimation <*> elementPosition <*> elementRotation <*> elementModel)
           sceneElements
     -- Unbind textures
     GL.activeTexture $= GL.TextureUnit shadowMapTextureUnit
@@ -115,14 +115,13 @@ createSceneRenderer shadowDepthMap = do
     pipelineUniform pipeline "modelM"
       $= (modelMatrix' :: GL.GLmatrix GL.GLfloat)
     -- Set normal matrix
-    normalMatrix <- toGlMatrix . m33_to_m44 . (^. _m33) . L.transpose
-      . inv44 $ modelMatrix
+    normalMatrix <- toGlMatrix . m33_to_m44 . (^. _m33) . L.transpose . inv44
+      $ modelMatrix
     pipelineUniform pipeline "normalM"
       $= (normalMatrix :: GL.GLmatrix GL.GLfloat)
     -- Draw
     GL.bindVertexArrayObject $= Just meshPrimVao
-    GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt
-      nullPtr
+    GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt nullPtr
     -- Unbind
     GL.bindVertexArrayObject $= Nothing
     GL.activeTexture $= GL.TextureUnit baseColorTextureUnit

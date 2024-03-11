@@ -22,7 +22,6 @@ import App (DeltaT, Frame, Input(..), Output(..), WorldState(..))
 import Camera (Camera(..))
 import qualified Camera as Cam
 import Matrix
-import Render.Element
 import Render.Env
 import Render.Model
 import Render.Pipeline
@@ -59,7 +58,7 @@ createDebugGizmoOverlayer = do
     projection <- toGlMatrix . perspectiveProjection . aspectRatio $ env
     projectionMUniform $= (projection :: GL.GLmatrix GL.GLfloat)
     GL.clear [GL.DepthBuffer]
-    withRenderer (renderMeshPrimitive pipeline) 0 model
+    withRenderer (renderMeshPrimitive pipeline) 0 (Quaternion 1 0) model
     unbindPipeline
     return ()
  where
@@ -105,6 +104,7 @@ createDebugInfoOverlayer timeRef = do
         V3 camX camY camZ = camPos
         (cursorX, cursorY) = inputCursorPos
         V3 pointerX pointerY pointerZ = pointerPosition
+        V3 playerX playerY playerZ = playerPosition
     FpsStatistics{..} <- fpsStats
     renderLines [
         -- FPS counter
@@ -114,7 +114,7 @@ createDebugInfoOverlayer timeRef = do
           (round fpsLow :: Int)
           (round fpsHigh :: Int),
         -- Player position
-        uncurry (printf "Player: x% .5f y 0.00000 z% .5f") playerPosition,
+        printf "Player: x% .5f y x% .5f z% .5f" playerX playerY playerZ,
         printf "Camera: x% .5f y% .5f z% .5f" camX camY camZ,
         printf "        pitch% .1f yaw% .1f" (180 * camPitch / pi)
           . (/ pi) . (* 180) $ camYaw,
@@ -182,14 +182,14 @@ createDebugQuadOverlayer texture = do
   GL.bindBuffer GL.ArrayBuffer $= Just vertexBuffer
   -- Load vertices into array buffer
   withArray vertices $ \ptr -> do
-    let size = fromIntegral $ length vertices * sizeOf (undefined :: VertexUnit)
+    let size = fromIntegral $ length vertices * sizeOf (0.0 :: GL.GLfloat)
     GL.bufferData GL.ArrayBuffer $= (size, ptr, GL.StaticDraw)
   -- Define vertex attribute pointers
   let positionAttributeLocation = GL.AttribLocation 0
       positionAttributeWidth = 3
       textureCoordinateAttributeLocation = GL.AttribLocation 1
       textureCoordinateAttributeWidth = 2
-      sizeOfVertexUnit = fromIntegral . sizeOf $ (0.0 :: VertexUnit)
+      sizeOfVertexUnit = fromIntegral . sizeOf $ (0.0 :: GL.GLfloat)
       stride = 5
   --   Position
   GL.vertexAttribPointer positionAttributeLocation $=
@@ -208,7 +208,7 @@ createDebugQuadOverlayer texture = do
     ]
   return $ overlayDebugQuad pipeline vertexArrayObject
  where
-  vertices :: Vertices
+  vertices :: [GL.GLfloat]
   vertices = [
     -- Position    Texture co-ords
     -- x   y   z   x   y

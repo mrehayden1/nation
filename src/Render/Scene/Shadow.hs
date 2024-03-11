@@ -80,7 +80,7 @@ createShadowDepthMapper = do
       )
     GL.clear [GL.DepthBuffer]
     mapM_ (withRendererPosed (renderMeshPrimitive pipeline)
-            <$> elementAnimation <*> elementPosition <*> elementModel)
+            <$> elementAnimation <*> elementPosition <*> elementRotation <*> elementModel)
           sceneElements
     GL.bindFramebuffer GL.Framebuffer $= GL.defaultFramebufferObject -- unbind
 

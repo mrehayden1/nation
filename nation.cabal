@@ -30,8 +30,8 @@ executable nation
       Cursor
       Matrix
       Model
+      Quaternion
       Render.Debug
-      Render.Element
       Render.Env
       Render.Model
       Render.Model.GLTF

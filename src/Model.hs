@@ -24,13 +24,11 @@ data ModelName =
 
 loadModels :: IO (Map ModelName Model)
 loadModels = fmap M.fromList . mapM (uncurry (fmap . (,))) $ [
+    (Fauna, loadModel "assets/models/fauna.glb"),
     (Grass, loadGrass),
     (Horse, loadModel "assets/models/horse.glb"),
-    (Pointer, loadModel "assets/models/emerald.glb")
-    {-
-    (Monument, loadModel "assets/models/monument.glb"),
-    (Fauna, loadModel "assets/models/fauna.glb"),
-    -}
+    (Pointer, loadModel "assets/models/emerald.glb"),
+    (Monument, loadModel "assets/models/monument.glb")
   ]
 
 loadGrass :: IO Model
@@ -45,15 +43,18 @@ loadGrass = do
                               V3   50  0 (-50)]
       normals = V.fromList [V3 0 1 0, V3 0 1 0, V3 0 1 0, V3 0 1 0]
       tangents = V.fromList [V4 1 0 0 1, V4 1 0 0 1, V4 1 0 0 1, V4 1 0 0 1]
-      texCoords = V.fromList [V2 (-50/4.5) (-50/4.5),
-                              V2 (-50/4.5) ( 50/4.5),
-                              V2 ( 50/4.5) ( 50/4.5),
-                              V2 ( 50/4.5) (-50/4.5)]
+      texCoords = V.fromList . fmap (^/ textureScale) $ [
+                    V2 (-50) (-50),
+                    V2 (-50)   50 ,
+                    V2   50    50 ,
+                    V2   50  (-50)]
   prim <- meshPrimitive (materials ! 0) Triangles indices positions normals
             tangents texCoords
   let mesh = V.fromList [prim]
       node = SceneNode mempty (Just mesh) (Quaternion 1 0) 1 0
   return . Model . Node node $ []
+ where
+  textureScale = 4.5
 
 loadModel :: FilePath -> IO Model
 loadModel pathname = do

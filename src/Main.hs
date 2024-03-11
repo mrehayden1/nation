@@ -66,27 +66,44 @@ main = do
     overlayDebugQuad <- createDebugQuadOverlayer shadowDepthMapTexture
     overlayDebugInfo <- createDebugInfoOverlayer timeRef
     overlayGizmo <- createDebugGizmoOverlayer
+    -- TODO Move the rendering to a free standing definition
     -- React to changes in our Reflex application
     let renderFrame frame@(Input{..}, Output{..}) = do
           let WorldState{..} = worldState
-              V3 pointerX pointerY pointerZ = pointerPosition
               scene = Scene.Scene {
                 sceneCamera = camera,
                 sceneElements = [
+                  {-
+                  Scene.Element {
+                    elementAnimation = Nothing,
+                    elementModel = models ! Monument,
+                    elementPosition = V3 3 0 3,
+                    elementRotation = Quaternion 1 0
+                  },
+                  Scene.Element {
+                    elementAnimation = Nothing,
+                    elementModel = models ! Fauna,
+                    elementPosition = V3 10 0 10,
+                    elementRotation = Quaternion 1 0
+                  }
+                  -}
                   Scene.Element {
                     elementAnimation = Nothing,
                     elementModel = models ! Grass,
-                    elementPosition = V3 0 0 0
+                    elementPosition = 0,
+                    elementRotation = Quaternion 1 0
                   },
                   Scene.Element {
                     elementAnimation = Just ("spin", 5, animationTime),
                     elementModel = models ! Pointer,
-                    elementPosition = pointerPosition
+                    elementPosition = pointerPosition,
+                    elementRotation = Quaternion 1 0
                   },
                   Scene.Element {
-                    elementAnimation = Just ("Idle", 3, animationTime),
+                    elementAnimation = Nothing,
                     elementModel = models ! Horse,
-                    elementPosition = V3 0 0 0
+                    elementPosition = playerPosition,
+                    elementRotation = playerDirection
                   }
                 ],
                 sceneDaylight = Scene.Daylight {
