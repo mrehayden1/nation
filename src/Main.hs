@@ -68,7 +68,7 @@ main = do
     overlayGizmo <- createDebugGizmoOverlayer
     -- TODO Move the rendering to a free standing definition
     -- React to changes in our Reflex application
-    let renderFrame frame@(Input{..}, Output{..}) = do
+    let renderFrame frame@(_, Output{..}) = do
           let WorldState{..} = worldState
               scene = Scene.Scene {
                 sceneCamera = camera,

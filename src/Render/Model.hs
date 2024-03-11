@@ -29,8 +29,6 @@ import Matrix
 import Render.Model.Model
 import Render.Model.GLTF
 
-import Debug.Trace
-
 withRenderer :: forall m. Monad m
   => (M44 Float -> MeshPrimitive -> m ())
   -> V3 Float
