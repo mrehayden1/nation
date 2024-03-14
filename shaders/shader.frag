@@ -113,17 +113,23 @@ void main()
 {
   vec3 lightColour = vec3(1.0f, 1.0f, 1.0f);
 
-  vec3 baseColor;
+  vec4 baseColor;
 
   if (hasBaseColorTexture) {
-    vec4 baseColorRgba = texture(baseColorTexture, TexCoords) * baseColorFactor;
-    float alpha = baseColorRgba.a;
-    baseColor = baseColorRgba.rgb;
-    // Alpha cut-off
-    if (alphaMode == ALPHA_MODE_MASK && alpha < alphaCutoff)
-      discard;
+    baseColor = texture(baseColorTexture, TexCoords) * baseColorFactor;
   } else {
-    baseColor = baseColorFactor.rgb;
+    baseColor = baseColorFactor;
+  }
+
+  // Alpha coverage
+  if (alphaMode == ALPHA_MODE_MASK) {
+    if (baseColor.a < alphaCutoff) {
+      discard;
+    } else {
+      baseColor.a = 1.0f;
+    }
+  } else if (alphaMode == ALPHA_MODE_OPAQUE) {
+    baseColor.a = 1.0f;
   }
 
   float roughness, metallic;
@@ -140,7 +146,7 @@ void main()
   vec3 V = normalize(camPos - WorldPos);
   vec3 L = lightDirection;
   vec3 H = normalize(V + L);
-  vec3 radiance = lightColour * 4;
+  vec3 radiance = lightColour * 4.0;
 
   vec3 N;
 
@@ -159,7 +165,7 @@ void main()
   // Cook-Torrance BRDF
   float NDF = DistributionGGX(N, H, roughness);
   float G   = GeometrySmith(N, V, L, roughness);
-  vec3 F0 = mix(vec3(0.04), baseColor, metallic);
+  vec3 F0 = mix(vec3(0.04), baseColor.rgb, metallic);
   vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);
 
   vec3 kS = F;
@@ -172,10 +178,10 @@ void main()
 
   float NdotL = max(dot(N, L), 0.0);
   float shadow = ShadowCalculation(LightClipPos);
-  vec3 Lo = (1 - shadow) * (kD * baseColor / PI + specular) * radiance * NdotL;
+  vec3 Lo = (1 - shadow) * (kD * baseColor.rgb / PI + specular) * radiance * NdotL;
 
   // TODO Ambient occlusion
-  vec3 ambient = ambientIntensity * lightColour * baseColor;// * ao;
+  vec3 ambient = ambientIntensity * lightColour * baseColor.rgb;// * ao;
 
   vec3 lighting = ambient + Lo;
 
@@ -186,5 +192,5 @@ void main()
   float gamma = 2.2;
   lighting = pow(lighting, vec3(1.0/gamma));
 
-  FragColor = vec4(lighting, 1.0);
+  FragColor = vec4(lighting, baseColor.a);
 }
