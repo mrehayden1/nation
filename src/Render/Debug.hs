@@ -1,4 +1,5 @@
 module Render.Debug (
+  createConsoleOverlayer,
   createDebugGizmoOverlayer,
   createDebugInfoOverlayer,
   createDebugQuadOverlayer
@@ -18,7 +19,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import Linear
 import Text.Printf
 
-import App (DeltaT, Frame, Input(..), Output(..), WorldState(..))
+import App (DeltaT, Frame, Input(..), Output(..), World(..))
 import Camera (Camera(..))
 import qualified Camera as Cam
 import Matrix
@@ -34,6 +35,34 @@ data FpsStatistics = FpsStatistics {
   fpsLow :: DeltaT,
   fpsHigh :: DeltaT
 }
+
+-- TODO Refactor this and createDebugInfoOverlayer
+--  - Pre-load font
+--  - Refactor out screen position logic
+createConsoleOverlayer :: IO (RenderEnv -> Frame -> IO ())
+createConsoleOverlayer = do
+  renderText <- createDebugTextRenderer
+  font <- loadFont "bpdots.squares-bold"
+  return $ renderConsole renderText font
+ where
+  renderConsole :: (RenderEnv -> Text -> IO ())
+    -> MsdfFont
+    -> RenderEnv
+    -> Frame
+    -> IO ()
+  renderConsole renderText font env (_, Output{..}) = do
+    -- FIXME duplicated from renderLines
+    let screenBottom = if aspectRatio env > 1
+                         then negate . recip . aspectRatio $ env
+                         else -1
+        screenLeft = negate . min 1 . aspectRatio $ env
+        size = 0.02
+        left = screenLeft
+        bottom = screenBottom
+    GL.clear [GL.DepthBuffer]
+    t <- createDebugText font size (left, bottom) $ "> " ++ outputConsoleText ++ "_"
+    renderText env t
+    deleteText t
 
 createDebugGizmoOverlayer :: IO (RenderEnv -> Camera -> IO ())
 createDebugGizmoOverlayer = do
@@ -99,12 +128,12 @@ createDebugInfoOverlayer timeRef = do
     -> Frame
     -> IO ()
   renderDebugText deltasRef fpsRef font renderText env (Input{..}, Output{..}) = do
-    let WorldState{..} = worldState
-        Camera{..} = camera
+    let World{..} = outputWorld
+        Camera{..} = worldCamera
         V3 camX camY camZ = camPos
         (cursorX, cursorY) = inputCursorPos
-        V3 pointerX pointerY pointerZ = pointerPosition
-        V3 playerX playerY playerZ = playerPosition
+        V3 pointerX pointerY pointerZ = worldPointerPosition
+        V3 playerX playerY playerZ = worldPlayerPosition
     FpsStatistics{..} <- fpsStats
     renderLines [
         -- FPS counter
@@ -120,13 +149,13 @@ createDebugInfoOverlayer timeRef = do
           . (/ pi) . (* 180) $ camYaw,
         -- Keys
         printf "Held keys: %s" . List.intercalate ", "
-          . fmap (drop 4 . show) $ outputKeys,
-        -- Cursor stuff (temp?)
-        printf "Cursor (screen) %.5f %.5f" cursorX cursorY,
-        printf "       (world)  %.5f %.5f %.5f" pointerX pointerY pointerZ,
+          . fmap (drop 4 . show . fst) $ outputDebugKeys,
         -- Mouse buttons
         printf "Held buttons: %s" . List.intercalate ", "
-          . fmap (drop 12 . show) $ outputMouseButtons
+          . fmap (drop 12 . show) $ outputDebugMouseButtons,
+        -- Cursor stuff (temp?)
+        printf "Cursor (screen) %.5f %.5f" cursorX cursorY,
+        printf "       (world)  %.5f %.5f %.5f" pointerX pointerY pointerZ
       ]
    where
     renderLines :: [String] -> IO ()
@@ -136,7 +165,7 @@ createDebugInfoOverlayer timeRef = do
                         then recip . aspectRatio $ env
                         else 1
           screenLeft = negate . min 1 . aspectRatio $ env
-          padding = 0.025
+          padding = 0.0125
           size = 0.02
           left = screenLeft + padding
           top line = screenTop - padding - line * size

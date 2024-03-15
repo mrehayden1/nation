@@ -22,6 +22,7 @@ import App
 import Model
 import Render.Debug
 import Render.Env
+import Render.Model
 import qualified Render.Scene as Scene
 import qualified Render.Scene.Shadow as Shadow
 
@@ -53,73 +54,13 @@ renderEnv = RenderEnv {
 main :: IO ()
 main = do
   putStrLn $ "Starting " ++ appName ++ "..."
-  bracket initialise shutdown $ \win -> do
+  bracket initialiseGraphics shutdown $ \win -> do
     -- Used to get the time the frame was last refreshed
     timeRef <- newIORef 0
     -- Create graphics elements
     models <- loadModels
-    -- Create a depth buffer object and depth map texture
-    (shadowDepthMapTexture, renderShadowDepthMap)
-      <- Shadow.createShadowDepthMapper
-    -- Create renderers
-    renderScene <- Scene.createSceneRenderer shadowDepthMapTexture
-    overlayDebugQuad <- createDebugQuadOverlayer shadowDepthMapTexture
-    overlayDebugInfo <- createDebugInfoOverlayer timeRef
-    overlayGizmo <- createDebugGizmoOverlayer
-    -- TODO Move the rendering to a free standing definition
-    -- React to changes in our Reflex application
-    let renderFrame frame@(_, Output{..}) = do
-          let WorldState{..} = worldState
-              scene = Scene.Scene {
-                sceneCamera = camera,
-                sceneElements = [
-                  {-
-                  Scene.Element {
-                    elementAnimation = Nothing,
-                    elementModel = models ! Monument,
-                    elementPosition = V3 3 0 3,
-                    elementRotation = Quaternion 1 0
-                  },
-                  Scene.Element {
-                    elementAnimation = Nothing,
-                    elementModel = models ! Fauna,
-                    elementPosition = V3 10 0 10,
-                    elementRotation = Quaternion 1 0
-                  }
-                  -}
-                  Scene.Element {
-                    elementAnimation = Nothing,
-                    elementModel = models ! Grass,
-                    elementPosition = 0,
-                    elementRotation = Quaternion 1 0
-                  },
-                  Scene.Element {
-                    elementAnimation = Just ("spin", 5, animationTime),
-                    elementModel = models ! Pointer,
-                    elementPosition = pointerPosition,
-                    elementRotation = Quaternion 1 0
-                  },
-                  Scene.Element {
-                    elementAnimation = Nothing,
-                    elementModel = models ! Horse,
-                    elementPosition = playerPosition,
-                    elementRotation = playerDirection
-                  }
-                ],
-                sceneDaylight = Scene.Daylight {
-                  daylightAmbientIntensity = daylightAmbientIntensity,
-                  daylightPitch = sunPitch sun,
-                  daylightYaw = sunYaw sun
-                }
-              }
-          renderShadowDepthMap scene
-          renderScene renderEnv scene
-          when shouldOverlayLightDepthQuad overlayDebugQuad
-          when shouldOverlayDebugInfo $ do
-            overlayDebugInfo renderEnv frame
-            unless shouldOverlayLightDepthQuad . overlayGizmo renderEnv
-              $ camera
-          GLFW.swapBuffers win
+    -- Create renderer
+    renderFrame <- createRenderer win timeRef models
     -- Enter game loop
     runHeadlessApp $ do
       time <- liftIO getPOSIXTime
@@ -132,15 +73,21 @@ main = do
       (eTick, tickTrigger) <- newTriggerEvent
       -- Collect up the pressed keys during the current tick resetting them
       -- when the next tick comes
-      let keysD = foldDyn (:) [] . fmap (\(k, _, s, m) -> (k, s, m))
-      keysE <- networkHold (return $ pure []) $ keysD key <$ eTick
-      let buttons = foldDyn (:) [] . fmap (\(b, s, m) -> (b, s, m))
-      buttonsE <- networkHold (return $ pure []) $ buttons mouseButton <$ eTick
-      let eInput = attachPromptlyDynWith uncurry
-                     (Input <$> cursorPos <*> join buttonsE <*> join keysE)
-            . leftmost $ [(time, 0) <$ ePostBuild, eTick]
+      let keys' = fmap (fmap reverse) . foldDyn (:) []
+                    . fmap (\(k, _, s, m) -> (k, s, m))
+      keysTick <- fmap join . networkHold (return $ pure [])
+                    $ keys' key <$ eTick
+      let buttons = foldDyn (:) []
+                      . fmap (\(b, s, m) -> (b, s, m)) $ mouseButton
+      buttonsTick <- fmap join
+                       . networkHold (return $ pure []) $ buttons <$ eTick
+      let eInput =
+            attachPromptlyDynWith uncurry
+              (Input <$> cursorPos <*> buttonsTick <*> keysTick)
+              . leftmost $ [(time, 0) <$ ePostBuild, eTick]
       eFrame <- fmap updated . flip runReaderT appEnv . game $ eInput
-      let eShouldExit = void . ffilter id . fmap (shouldExit . snd) $ eFrame
+      let eShouldExit = void . ffilter id . fmap (outputShouldExit . snd)
+                          $ eFrame
           eShutdown = leftmost [eShouldExit, windowClose]
       performEvent_
         . fmap (progressFrame timeRef
@@ -152,8 +99,8 @@ main = do
   progressFrame :: MonadIO m
     => IORef POSIXTime
     -> ((Time, DeltaT) -> m ())
-    -> ((Input, Output) -> m ())
-    -> (Input, Output)
+    -> (Frame -> m ())
+    -> Frame
     -> m ()
   progressFrame timeRef tickTrigger render frame = do
     render frame
@@ -166,8 +113,79 @@ main = do
     -- Collect events to process in the next tick.
     liftIO GLFW.pollEvents
 
-initialise :: IO GLFW.Window
-initialise = do
+createRenderer :: GLFW.Window
+                    -> IORef POSIXTime
+                    -> Map ModelName Model
+                    -> IO (Frame -> IO ())
+createRenderer win timeRef models = do
+  -- Create a depth buffer object and depth map texture
+  (shadowDepthMapTexture, renderShadowDepthMap)
+    <- Shadow.createShadowDepthMapper
+  renderScene <- Scene.createSceneRenderer shadowDepthMapTexture
+  overlayConsole <- createConsoleOverlayer
+  overlayDebugQuad <- createDebugQuadOverlayer shadowDepthMapTexture
+  overlayDebugInfo <- createDebugInfoOverlayer timeRef
+  overlayGizmo <- createDebugGizmoOverlayer
+  -- TODO Move this to it's own definition
+  -- React to changes in our Reflex application
+  return $ \frame@(_, Output{..}) -> do
+    -- TODO Move scene creation to its own definition
+    let World{..} = outputWorld
+        Daylight{..} = worldDaylight
+        scene = Scene.Scene {
+          sceneCamera = worldCamera,
+          sceneElements = [
+            {-
+            Scene.Element {
+              elementAnimation = Nothing,
+              elementModel = models ! Monument,
+              elementPosition = V3 3 0 3,
+              elementRotation = Quaternion 1 0
+            },
+            Scene.Element {
+              elementAnimation = Nothing,
+              elementModel = models ! Fauna,
+              elementPosition = V3 10 0 10,
+              elementRotation = Quaternion 1 0
+            }
+            -}
+            Scene.Element {
+              elementAnimation = Nothing,
+              elementModel = models ! Grass,
+              elementPosition = 0,
+              elementRotation = Quaternion 1 0
+            },
+            Scene.Element {
+              elementAnimation = Just ("spin", 5, worldAnimationTime),
+              elementModel = models ! Pointer,
+              elementPosition = worldPointerPosition,
+              elementRotation = Quaternion 1 0
+            },
+            Scene.Element {
+              elementAnimation = Nothing,
+              elementModel = models ! Horse,
+              elementPosition = worldPlayerPosition,
+              elementRotation = worldPlayerDirection
+            }
+          ],
+          sceneDaylight = Scene.Daylight {
+            daylightAmbientIntensity = daylightAmbientIntensity,
+            daylightPitch = daylightSunPitch,
+            daylightYaw = daylightSunYaw
+          }
+        }
+    renderShadowDepthMap scene
+    renderScene renderEnv scene
+    when outputDebugQuadOverlay overlayDebugQuad
+    when outputDebugInfoOverlay $ do
+      overlayDebugInfo renderEnv frame
+      unless outputDebugQuadOverlay . overlayGizmo renderEnv
+        $ worldCamera
+    when outputConsoleOpen $ overlayConsole renderEnv frame
+    GLFW.swapBuffers win
+
+initialiseGraphics :: IO GLFW.Window
+initialiseGraphics = do
   let Env{..} = appEnv
   r <- GLFW.init
   unless r (error "GLFW.init error.")

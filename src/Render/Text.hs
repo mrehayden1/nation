@@ -43,8 +43,8 @@ data TextBackground = TextBackground {
 }
 
 -- Create a renderer that renders text in "debug text space" which has -1 and 1
--- touching the left and right window edges respectively along the longest axis
--- of the viewport (in practice this will be along the x-axis)
+-- touching the edges of the longest axis of the viewport (in practice this
+-- will be along the x-axis)
 createDebugTextRenderer :: IO (RenderEnv -> Text -> IO ())
 createDebugTextRenderer = do
   textPipeline <- compilePipeline [

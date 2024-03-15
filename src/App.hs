@@ -9,8 +9,8 @@ module App (
   DeltaT,
 
   Output(..),
-  WorldState(..),
-  Sun(..),
+  World(..),
+  Daylight(..),
 
   PlayerPosition,
   PosX,
@@ -23,6 +23,7 @@ import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.Reader
 import Data.Fixed
+import Data.Functor
 import Data.List (delete, insert)
 import Data.Time.Clock
 import Data.Tuple.Extra
@@ -61,32 +62,52 @@ data Input = Input {
   inputDeltaT :: DeltaT
 } deriving (Show)
 
+buttonMousePrimary :: GLFW.MouseButton
+buttonMousePrimary = GLFW.MouseButton'1
+
+keyExit :: GLFW.Key
+keyExit = GLFW.Key'Escape
+
+keyDebugInfoToggle :: GLFW.Key
+keyDebugInfoToggle = GLFW.Key'F3
+
+keyDebugQuadToggle :: GLFW.Key
+keyDebugQuadToggle = GLFW.Key'F2
+
+keyConsoleToggle :: GLFW.Key
+keyConsoleToggle = GLFW.Key'GraveAccent
+
+keyDebugCameraToggle :: GLFW.Key
+keyDebugCameraToggle = GLFW.Key'Backspace
+
 type Time = NominalDiffTime
 type DeltaT = NominalDiffTime
 
 data Output = Output {
-  outputKeys :: [GLFW.Key],
-  outputMouseButtons :: [GLFW.MouseButton],
-  shouldExit :: Bool,
-  shouldOverlayLightDepthQuad :: Bool,
-  shouldOverlayDebugInfo :: Bool,
-  worldState :: WorldState
+  outputConsoleOpen :: Bool,
+  outputConsoleText :: String,
+  outputDebugKeys :: [(GLFW.Key, GLFW.ModifierKeys)],
+  outputDebugMouseButtons :: [GLFW.MouseButton],
+  outputDebugQuadOverlay :: Bool,
+  outputDebugInfoOverlay :: Bool,
+  outputShouldExit :: Bool,
+  outputWorld :: World
 }
 
-data Sun = Sun {
-  -- Pointing at the sun
-  sunPitch :: Float,
-  sunYaw :: Float
-}
-
-data WorldState = WorldState {
-  animationTime :: Float,
-  camera :: Camera,
+data Daylight = Daylight {
   daylightAmbientIntensity :: Float,
-  playerDirection :: Quaternion Float,
-  playerPosition :: V3 Float,
-  pointerPosition :: V3 Float,
-  sun :: Sun
+  -- Pointing at the sun
+  daylightSunPitch :: Float,
+  daylightSunYaw :: Float
+}
+
+data World = World {
+  worldAnimationTime :: Float,
+  worldCamera :: Camera,
+  worldDaylight :: Daylight,
+  worldPlayerDirection :: Quaternion Float,
+  worldPlayerPosition :: V3 Float,
+  worldPointerPosition :: V3 Float
 }
 
 type PosX = Float
@@ -103,18 +124,6 @@ playerSpeed = 4.5
 debugCameraSpeed :: Floating a => a
 debugCameraSpeed = 6
 
-quitKey :: GLFW.Key
-quitKey = GLFW.Key'Escape
-
-toggleDebugQuadKey :: GLFW.Key
-toggleDebugQuadKey = GLFW.Key'F2
-
-toggleDebugInfoKey :: GLFW.Key
-toggleDebugInfoKey = GLFW.Key'F3
-
-toggleDebugCameraKey :: GLFW.Key
-toggleDebugCameraKey = GLFW.Key'Backspace
-
 type App t a = forall m. (Adjustable t m, MonadFix m, MonadHold t m,
   MonadReader Env m) => m a
 
@@ -127,19 +136,24 @@ game eInput = do
   (keyPresses, heldKeys) <- keys eInput
   -- Mouse buttons
   (buttonPresses, heldButtons) <- buttons eInput
-  let clicks = ffilter (elem GLFW.MouseButton'1) buttonPresses
+  let clicks = ffilter (elem buttonMousePrimary) buttonPresses
   -- Cursor window position
   let cursorE = fmap inputCursorPos eInput
   cursor <- holdDyn (0, 0) cursorE
+  -- Console
+  consoleOpen <- toggle False . ffilter (elem keyConsoleToggle . fmap fst)
+    $ keyPresses
+  consoleText <- console consoleOpen keyPresses
   -- Shortcuts
-  shouldExit <- holdDyn False . fmap (const True) . ffilter (elem quitKey)
+  shouldExit <- holdDyn False . ($> True) . ffilter (elem keyExit . fmap fst)
     $ keyPresses
-  overlayQuad <- toggle False . ffilter (elem toggleDebugQuadKey) $ keyPresses
-  debugCameraOn <- toggle False . ffilter (elem toggleDebugCameraKey)
-    $ keyPresses
-  debugInfoOn <- toggle debugInfoEnabledDefault
-    . ffilter (elem toggleDebugInfoKey)
-    $ keyPresses
+  overlayDebugQuad <- toggle False
+    . ffilter (elem keyDebugQuadToggle . fmap fst) $ keyPresses
+  overlayDebugInfo <- toggle debugInfoEnabledDefault
+    . ffilter (elem keyDebugInfoToggle . fmap fst) $ keyPresses
+  debugCameraOn <- toggle False
+    . ffilter (elem keyDebugCameraToggle . fmap fst)
+    . gate (current . fmap not $ consoleOpen) $ keyPresses
   -- Player position
   rec
     moveSelection <- holdDyn playerStart . tag (current pointerD) $ clicks
@@ -152,7 +166,7 @@ game eInput = do
       . fmap inputDeltaT
       $ eInput
   -- Player camera
-    let playerCamera = fmap setPlayerCamera . pure $ playerStart--playerPosition
+    let playerCamera = pure $ setPlayerCamera playerStart
   -- Pointer
     pointerD <- pointer cursorE playerCamera
   -- Debug camera
@@ -163,20 +177,21 @@ game eInput = do
     $ (,) <$> deltaT <*> heldKeys
   let ambientLight = fmap ((* 1) . max 0 . sin) sunPitch
   -- Output
-      worldState = WorldState
+      worldState = World
         <$> animationT
         <*> camera
-        <*> ambientLight
+        <*> (Daylight <$> ambientLight <*> sunPitch <*> pure (pi / 8))
         <*> fmap (fromVectors (V3 1 0 0)) playerDirection
         <*> playerPosition
         <*> pointerD
-        <*> (Sun <$> sunPitch <*> pure (pi / 8))
       output = Output
-        <$> heldKeys
+        <$> consoleOpen
+        <*> consoleText
+        <*> heldKeys
         <*> heldButtons
+        <*> overlayDebugQuad
+        <*> overlayDebugInfo
         <*> shouldExit
-        <*> overlayQuad
-        <*> debugInfoOn
         <*> worldState
   -- Return the current input with the output.
   -- We can use undefined for the initial value because output is never
@@ -196,12 +211,12 @@ game eInput = do
          camYaw = pi / 2
        }
 
-  updateSunPitch :: DeltaT -> [GLFW.Key] -> Float -> Float
+  updateSunPitch :: DeltaT -> [(GLFW.Key, GLFW.ModifierKeys)] -> Float -> Float
   updateSunPitch dt ks pitch = (+ pitch) . sum . fmap keyChange $ ks
    where
-    keyChange GLFW.Key'Equal = angularVelocity * realToFrac dt
-    keyChange GLFW.Key'Minus = negate angularVelocity * realToFrac dt
-    keyChange _              = 0
+    keyChange (GLFW.Key'Equal, _) = angularVelocity * realToFrac dt
+    keyChange (GLFW.Key'Minus, _) = negate angularVelocity * realToFrac dt
+    keyChange _                   = 0
     -- Radians per second
     angularVelocity = 1
 
@@ -221,7 +236,7 @@ game eInput = do
   debugCamera :: Dynamic t DeltaT
     -> Dynamic t Camera
     -> Dynamic t Bool
-    -> Dynamic t [GLFW.Key]
+    -> Dynamic t [(GLFW.Key, GLFW.ModifierKeys)]
     -> Dynamic t CursorPosition
     -> App t (Dynamic t Camera)
   debugCamera delta playerCamera debugCameraOn heldKeys cursor = do
@@ -239,7 +254,7 @@ game eInput = do
       s <- foldDyn (uncurry3 updateDebugCamera) ((0, 0), camStart)
        . gate (pure camOn)
        . updated
-       $ (,,) <$> delta <*> heldKeys <*> cursor
+       $ (,,) <$> delta <*> fmap (fmap fst) heldKeys <*> cursor
       return $ fmap snd s
 
     updateDebugCamera :: DeltaT
@@ -275,8 +290,20 @@ game eInput = do
       keyVelocity GLFW.Key'D = Cam.right camera
       keyVelocity _          = V3 0 0 0
 
+console :: Dynamic t Bool
+  -> Event t [(GLFW.Key, GLFW.ModifierKeys)]
+  -> App t (Dynamic t String)
+console open = foldDyn (flip (foldl updateText)) "" . gate (current open)
+ where
+  updateText :: String -> (GLFW.Key, GLFW.ModifierKeys) -> String
+  updateText s (GLFW.Key'Backspace, _) = take (length s - 1) s
+  updateText s (alpha             , _)
+    | alpha >= GLFW.Key'A && alpha <= GLFW.Key'Z = s ++ (drop 4 . show $ alpha)
+  updateText s _                       = s
 
-keys :: Event t Input -> App t (Event t [GLFW.Key], Dynamic t [GLFW.Key])
+keys :: Event t Input
+  -> App t (Event t [(GLFW.Key, GLFW.ModifierKeys)]  ,
+            Dynamic t [(GLFW.Key, GLFW.ModifierKeys)])
 keys eInput = do
   let pressed = ffilter (not . null) . fmap filterPressed $ eInput
   held <- foldDyn
@@ -285,17 +312,17 @@ keys eInput = do
     eInput
   return (pressed, held)
  where
-  filterPressed = fmap fst3
-   . filter ((== GLFW.KeyState'Pressed) . snd3)
+  filterPressed = fmap ((,) <$> fst3 <*> thd3)
+   . filter (flip elem [GLFW.KeyState'Pressed, GLFW.KeyState'Repeating] . snd3)
    . inputKeys
 
   updateHeldKeys :: GLFW.Key
     -> GLFW.KeyState
     -> GLFW.ModifierKeys
-    -> [GLFW.Key]
-    -> [GLFW.Key]
-  updateHeldKeys k GLFW.KeyState'Pressed  _ ks = insert k ks
-  updateHeldKeys k GLFW.KeyState'Released _ ks = delete k ks
+    -> [(GLFW.Key, GLFW.ModifierKeys)]
+    -> [(GLFW.Key, GLFW.ModifierKeys)]
+  updateHeldKeys k GLFW.KeyState'Pressed  m ks = insert (k, m) ks
+  updateHeldKeys k GLFW.KeyState'Released m ks = delete (k, m) ks
   updateHeldKeys _ _                      _ ks = ks
 
 buttons :: Event t Input
