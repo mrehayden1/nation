@@ -36,7 +36,8 @@ import Camera
 import qualified Camera as Cam
 import Cursor
 import Matrix
-import Quaternion
+import Quaternion as Q
+import Vector
 
 data MsaaSubsamples = MsaaNone | Msaa2x | Msaa4x | Msaa8x | Msaa16x
   deriving (Eq, Enum)
@@ -114,14 +115,17 @@ type PosX = Float
 type PosZ = Float
 type PlayerPosition = (PosX, PosZ)
 
-playerStart :: Floating a => V3 a
+playerStart :: V3 Float
 playerStart = V3 0 0 0
 
 -- Meters per second
-playerSpeed :: Floating a => a
+playerSpeed :: Float
 playerSpeed = 4.5
 
-debugCameraSpeed :: Floating a => a
+epsilon :: Float
+epsilon = 0.01
+
+debugCameraSpeed :: Float
 debugCameraSpeed = 6
 
 type App t a = forall m. (Adjustable t m, MonadFix m, MonadHold t m,
@@ -156,13 +160,16 @@ game eInput = do
     . gate (current . fmap not $ consoleOpen) $ keyPresses
   -- Player position
   rec
-    moveSelection <- holdDyn playerStart . tag (current pointerD) $ clicks
+    moveSelection <- holdDyn (playerStart + V3 epsilon 0 0)
+      . tag (current pointerD) $ clicks
     let playerDirection = (normalize .) . (-)
+                            <$> moveSelection <*> playerPosition
+        playerVelocity = calculatePlayerVelocity
                             <$> moveSelection <*> playerPosition
     playerPosition <- foldDyn (+) playerStart
       . attachWith
-          (\a b -> a ^* playerSpeed * realToFrac b)
-          (current playerDirection)
+          ((. realToFrac) . (^*))
+          (current playerVelocity)
       . fmap inputDeltaT
       $ eInput
   -- Player camera
@@ -181,7 +188,7 @@ game eInput = do
         <$> animationT
         <*> camera
         <*> (Daylight <$> ambientLight <*> sunPitch <*> pure (pi / 8))
-        <*> fmap (fromVectors (V3 1 0 0)) playerDirection
+        <*> fmap (Q.fromVectors (V3 1 0 0)) playerDirection
         <*> playerPosition
         <*> pointerD
       output = Output
@@ -199,6 +206,13 @@ game eInput = do
   input <- holdDyn undefined eInput
   return $ (,) <$> input <*> output
  where
+  calculatePlayerVelocity :: V3 Float -> V3 Float -> V3 Float
+  calculatePlayerVelocity dest orig =
+    let delta = dest - orig
+    in if magnitude delta <= epsilon
+         then 0
+         else normalize delta ^* playerSpeed
+
   setPlayerCamera :: V3 Float -> Camera
   setPlayerCamera (V3 x _ z) =
     let th = (3 * pi) / 8
@@ -219,19 +233,6 @@ game eInput = do
     keyChange _                   = 0
     -- Radians per second
     angularVelocity = 1
-
-  updatePlayerPosition :: DeltaT -> [GLFW.Key] -> PlayerPosition -> PlayerPosition
-  updatePlayerPosition dt ks (x, z) =
-    let (V3 dx _ dz) = (playerSpeed *) . (realToFrac dt *) . sum
-                           . fmap keyVelocity $ ks
-    in (x + dx, z + dz)
-   where
-    keyVelocity :: Floating a => GLFW.Key -> V3 a
-    keyVelocity GLFW.Key'W = V3   0   0 (-1)
-    keyVelocity GLFW.Key'A = V3 (-1)  0   0
-    keyVelocity GLFW.Key'S = V3   0   0   1
-    keyVelocity GLFW.Key'D = V3   1   0   0
-    keyVelocity _          = V3   0   0   0
 
   debugCamera :: Dynamic t DeltaT
     -> Dynamic t Camera
