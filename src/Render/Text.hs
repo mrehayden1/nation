@@ -45,7 +45,7 @@ data TextBackground = TextBackground {
 -- Create a renderer that renders text in "debug text space" which has -1 and 1
 -- touching the edges of the longest axis of the viewport (in practice this
 -- will be along the x-axis)
-createDebugTextRenderer :: IO (RenderEnv -> Text -> IO ())
+createDebugTextRenderer :: IO (Text -> Render ())
 createDebugTextRenderer = do
   textPipeline <- compilePipeline [
       ("text", VertexShader),
@@ -55,17 +55,17 @@ createDebugTextRenderer = do
       ("text-background", VertexShader),
       ("text-background", FragmentShader)
     ]
-  return $ \env text -> do
-    renderBackground backgroundPipeline env text
-    renderText textPipeline env text
+  return $ \text -> do
+    renderBackground backgroundPipeline text
+    renderText textPipeline text
  where
-  renderText :: Pipeline -> RenderEnv -> Text -> IO ()
-  renderText pipeline env Text{..} = do
+  renderText :: Pipeline -> Text -> Render ()
+  renderText pipeline Text{..} = do
     let MsdfFont{..} = textFont
-    bindPipeline pipeline
+    liftIO $ bindPipeline pipeline
     -- Set projection matrix
     let projectionUniform = pipelineUniform pipeline "projectionM"
-    projectionM <- toGlMatrix . projection $ env
+    projectionM <- liftIO . toGlMatrix =<< projection
     projectionUniform $= (projectionM :: GL.GLmatrix GL.GLfloat)
     -- Bind Texture
     GL.activeTexture $= GL.TextureUnit 0
@@ -73,36 +73,37 @@ createDebugTextRenderer = do
     -- Bind VAO
     GL.bindVertexArrayObject $= Just textVao
     -- Draw
-    GL.drawElements GL.Triangles textNumIndices GL.UnsignedInt nullPtr
+    liftIO $ GL.drawElements GL.Triangles textNumIndices GL.UnsignedInt nullPtr
     -- Unbind
     GL.bindVertexArrayObject $= Nothing
     GL.textureBinding GL.Texture2D $= Nothing
 
-  renderBackground :: Pipeline -> RenderEnv -> Text -> IO ()
-  renderBackground pipeline env text = do
+  renderBackground :: Pipeline -> Text -> Render ()
+  renderBackground pipeline text = do
     let TextBackground{..} = textBackground text
-    bindPipeline pipeline
+    liftIO $ bindPipeline pipeline
     -- Set projection matrix
     -- TODO don't create the projection every render
     let projectionUniform = pipelineUniform pipeline "projectionM"
-    projectionM <- toGlMatrix . projection $ env
+    projectionM <- liftIO . toGlMatrix =<< projection
     projectionUniform $= (projectionM :: GL.GLmatrix GL.GLfloat)
     -- Bind VAO
     GL.bindVertexArrayObject $= Just textBgVao
     -- Draw
-    GL.drawArrays GL.Triangles 0 textBgNumVertices
+    liftIO $ GL.drawArrays GL.Triangles 0 textBgNumVertices
     -- Unbind
     GL.bindVertexArrayObject $= Just textBgVao
     GL.bindVertexArrayObject $= Nothing
 
-  projection :: RenderEnv -> L.M44 Float
-  projection env =
-    if aspectRatio env > 1
-      then let t = recip . aspectRatio $ env in L.ortho (-1) 1 (-t) t 1 (-1)
-      else let r = -aspectRatio env          in L.ortho (-r) r (-1) 1 1 (-1)
+  projection :: Render (L.M44 Float)
+  projection = do
+    aspectRatio <- asks viewportAspectRatio
+    return $ if aspectRatio > 1
+      then let t = recip aspectRatio in L.ortho (-1) 1 (-t) t 1 (-1)
+      else let r = -aspectRatio      in L.ortho (-r) r (-1) 1 1 (-1)
 
 -- createDebugText - positioned in "text space" with ems as the unit
-createDebugText :: MsdfFont -> Scale -> Origin -> String -> IO Text
+createDebugText :: MsdfFont -> Scale -> Origin -> String -> Render Text
 createDebugText font@MsdfFont{..} scale' origin str = do
   let MsdfFontMeta{..} = meta
       sizeOfVertexUnit = sizeOf (undefined :: GL.GLfloat) :: Int
@@ -121,13 +122,13 @@ createDebugText font@MsdfFont{..} scale' origin str = do
   vbo <- GL.genObjectName
   GL.bindBuffer GL.ArrayBuffer $= Just vbo
   -- Load vertices into VBO
-  withArray quads $ \ptr -> do
+  liftIO $ withArray quads $ \ptr -> do
     let size = fromIntegral . (* sizeOfVertexUnit) . length $ quads
     GL.bufferData GL.ArrayBuffer $= (size, ptr, GL.StaticDraw)
   -- Create EBO
   ebo <- GL.genObjectName
   GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
-  withArray indices $ \ptr -> do
+  liftIO $ withArray indices $ \ptr -> do
     let size = fromIntegral . (* sizeOf (undefined :: GL.ArrayIndex))
                  . length $ indices
     GL.bufferData GL.ElementArrayBuffer $= (size, ptr, GL.StaticDraw)
@@ -221,7 +222,7 @@ createDebugText font@MsdfFont{..} scale' origin str = do
 createTextBackground :: Scale
   -> Origin
   -> GL.GLfloat
-  -> IO TextBackground
+  -> Render TextBackground
 createTextBackground scale' (x, y) x' = do
   let quad = [
           x , y ,
@@ -241,7 +242,7 @@ createTextBackground scale' (x, y) x' = do
   vbo <- GL.genObjectName
   GL.bindBuffer GL.ArrayBuffer $= Just vbo
   -- Load vertices into VBO
-  withArray quad $ \ptr -> do
+  liftIO $ withArray quad $ \ptr -> do
     let size = fromIntegral . (* sizeOfVertexUnit) . length $ quad
     GL.bufferData GL.ArrayBuffer $= (size, ptr, GL.StaticDraw)
   -- Create attribute pointers
@@ -266,7 +267,7 @@ createTextBackground scale' (x, y) x' = do
       textBgNumVertices = fromIntegral $ length quad `div` numVertexElems
     }
 
-deleteText :: Text -> IO ()
+deleteText :: Text -> Render ()
 deleteText Text{..} = do
   GL.deleteObjectName textVbo
   GL.deleteObjectName textEbo

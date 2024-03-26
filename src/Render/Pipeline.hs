@@ -1,3 +1,4 @@
+-- TODO Move this all into the render environment?
 module Render.Pipeline (
   Pipeline,
 
@@ -6,14 +7,23 @@ module Render.Pipeline (
   bindPipeline,
   unbindPipeline,
 
-  pipelineUniform
+  pipelineUniform,
+  pipelineUniformV,
+  pipelineUniformMatrix4v
 ) where
 
 import Control.Monad
+import Data.Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.StateVar
+import Data.Vector.Storable (Vector)
+import qualified Data.Vector.Storable as SV
+import Foreign
 import qualified Graphics.Rendering.OpenGL as GL
+import Graphics.GL
+import Linear
+import Text.Printf
 
 import Render.Shaders
 
@@ -25,12 +35,39 @@ data Pipeline = Pipeline {
 
 pipelineUniform :: (GL.Uniform a) => Pipeline -> String -> StateVar a
 pipelineUniform pipeline name = do
-  let location = Map.lookup name . pipelineUniforms
-                   $ pipeline
+  let location = Map.lookup name . pipelineUniforms $ pipeline
   maybe noOpStateVar GL.uniform location
  where
   noOpStateVar :: StateVar a
-  noOpStateVar = makeStateVar undefined $ \_ -> return ()
+  noOpStateVar = makeStateVar undefined $ \_ -> do
+    printf "pipelineUniform: warning: uniform '%s' not found.\n" name
+
+pipelineUniformV :: forall a. (Storable a, GL.Uniform a)
+  => Pipeline
+  -> String
+  -> Vector a
+  -> IO ()
+pipelineUniformV pipeline name vec = do
+  let location = Map.lookup (name ++ "[0]") . pipelineUniforms $ pipeline
+      size = fromIntegral $ sizeOf (undefined :: a) * SV.length vec
+  case location of
+    Nothing -> printf "pipelineUniform: warning: uniform '%s' not found.\n" name
+    Just l -> SV.unsafeWith vec (GL.uniformv l size)
+
+pipelineUniformMatrix4v :: Foldable f
+  => Pipeline
+  -> String
+  -> f (M44 Float)
+  -> IO ()
+pipelineUniformMatrix4v pipeline name mats = do
+  let vec = SV.fromList . concatMap (concatMap toList . toList) $ mats
+      location = Map.lookup (name ++ "[0]") . pipelineUniforms $ pipeline
+      n = fromIntegral . length $ mats
+  case location of
+    Nothing -> printf "pipelineUniform: warning: uniform '%s' not found.\n" name
+    Just (GL.UniformLocation l) -> do
+      -- M44s are stored in row major order so set transpose flag to true
+      SV.unsafeWith vec (glUniformMatrix4fv l n 1)
 
 compilePipeline :: [ShaderLocation] -> IO Pipeline
 compilePipeline shaders = do

@@ -1,11 +1,11 @@
 module Model (
+  Model,
   ModelName(..),
   loadModels
 ) where
 
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Tree
 import Data.Vector ((!))
 import qualified Data.Vector as V
 import Linear
@@ -15,7 +15,8 @@ import Render.Model as Model
 import Render.Model.GLTF.Material as Mat
 
 data ModelName =
-    Fauna
+    Cube
+  | Fauna
   | Grass
   | Horse
   | Monument
@@ -24,11 +25,12 @@ data ModelName =
 
 loadModels :: IO (Map ModelName Model)
 loadModels = fmap M.fromList . mapM (uncurry (fmap . (,))) $ [
-    (Fauna, loadModel "assets/models/fauna.glb"),
+    (Cube, loadModel "cube" "assets/models/animation-debug-cube.glb"),
+    (Fauna, loadModel "fauna" "assets/models/fauna.glb"),
     (Grass, loadGrass),
-    (Horse, loadModel "assets/models/horse.glb"),
-    (Pointer, loadModel "assets/models/emerald.glb"),
-    (Monument, loadModel "assets/models/monument.glb")
+    (Horse, loadModel "horse" "assets/models/horse.glb"),
+    (Monument, loadModel "monument" "assets/models/monument.glb"),
+    (Pointer, loadModel "emerald" "assets/models/emerald.glb")
   ]
 
 loadGrass :: IO Model
@@ -49,17 +51,17 @@ loadGrass = do
                     V2   50    50 ,
                     V2   50  (-50)]
   prim <- meshPrimitive (materials ! 0) Triangles indices positions normals
-            tangents texCoords
+            tangents texCoords mempty mempty
   let mesh = V.fromList [prim]
-      node = SceneNode mempty (Just mesh) (Quaternion 1 0) 1 0
-  return . Model . Node node $ []
+      node = Node mempty mempty False (Just mesh) (Quaternion 1 0) 1 Nothing 0
+  return . Model "grass" (V.singleton node) (V.singleton 0) mempty $ 0
  where
   textureScale = 4.5
 
-loadModel :: FilePath -> IO Model
-loadModel pathname = do
+loadModel :: String -> FilePath -> IO Model
+loadModel name pathname = do
   printFileName pathname
-  Model.fromGlbFile pathname
+  Model.fromGlbFile name pathname
 
 printFileName :: FilePath -> IO ()
 printFileName = printf "Loading model \"%s\"...\n"

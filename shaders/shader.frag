@@ -2,7 +2,7 @@
 in vec4 LightClipPos;
 in vec3 Normal;
 in mat3 TBN;
-in vec3 WorldPos;
+in vec4 WorldPos;
 in vec2 TexCoords;
 
 out vec4 FragColor;
@@ -143,7 +143,7 @@ void main()
     metallic = metallicFactor;
   }
 
-  vec3 V = normalize(camPos - WorldPos);
+  vec3 V = normalize(camPos - vec3(WorldPos));
   vec3 L = lightDirection;
   vec3 H = normalize(V + L);
   vec3 radiance = lightColour * 4.0;

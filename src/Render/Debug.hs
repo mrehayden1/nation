@@ -12,6 +12,7 @@ import qualified Data.List as List
 import Data.Maybe
 import Data.StateVar
 import Data.Time.Clock.POSIX
+import qualified Data.Vector as V
 import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
@@ -19,7 +20,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import Linear
 import Text.Printf
 
-import App (DeltaT, Frame, Input(..), Output(..), World(..))
+import App hiding (Env)
 import Camera (Camera(..))
 import qualified Camera as Cam
 import Matrix
@@ -39,65 +40,65 @@ data FpsStatistics = FpsStatistics {
 -- TODO Refactor this and createDebugInfoOverlayer
 --  - Pre-load font
 --  - Refactor out screen position logic
-createConsoleOverlayer :: IO (RenderEnv -> Frame -> IO ())
+createConsoleOverlayer :: IO (Frame -> Render ())
 createConsoleOverlayer = do
   renderText <- createDebugTextRenderer
   font <- loadFont "bpdots.squares-bold"
   return $ renderConsole renderText font
  where
-  renderConsole :: (RenderEnv -> Text -> IO ())
+  renderConsole :: (Text -> Render ())
     -> MsdfFont
-    -> RenderEnv
     -> Frame
-    -> IO ()
-  renderConsole renderText font env (_, Output{..}) = do
+    -> Render ()
+  renderConsole renderText font (_, Output{..}) = do
     -- FIXME duplicated from renderLines
-    let screenBottom = if aspectRatio env > 1
-                         then negate . recip . aspectRatio $ env
+    aspectRatio <- asks viewportAspectRatio
+    let screenBottom = if aspectRatio > 1
+                         then negate . recip $ aspectRatio
                          else -1
-        screenLeft = negate . min 1 . aspectRatio $ env
+        screenLeft = negate . min 1 $ aspectRatio
         size = 0.02
         left = screenLeft
         bottom = screenBottom
-    GL.clear [GL.DepthBuffer]
-    t <- createDebugText font size (left, bottom) $ "> " ++ outputConsoleText ++ "_"
-    renderText env t
+    liftIO $ GL.clear [GL.DepthBuffer]
+    t <- createDebugText font size (left, bottom) $ "> " ++ outputConsoleText
+           ++ "_"
+    renderText t
     deleteText t
 
-createDebugGizmoOverlayer :: IO (RenderEnv -> Camera -> IO ())
+createDebugGizmoOverlayer :: IO (Camera -> Render ())
 createDebugGizmoOverlayer = do
   pipeline <- compilePipeline [
       ("debug/gizmo", GL.FragmentShader),
       ("debug/gizmo", GL.VertexShader)
     ]
-  let modelMUniform = pipelineUniform pipeline "modelM"
-      viewMUniform = pipelineUniform pipeline "viewM"
-      projectionMUniform = pipelineUniform pipeline "projectionM"
   -- Load gizmo
-  model <- fromGlbFile "assets/models/reference_frame.glb"
-  return $ \env camera -> do
-    bindPipeline pipeline
-    modelM <- toGlMatrix (identity :: M44 GL.GLfloat)
-    modelMUniform $= modelM
+  model <- fromGlbFile "gizmo" "assets/models/reference_frame.glb"
+  return $ \camera -> local (set _envPipeline pipeline) $ do
+    liftIO . bindPipeline $ pipeline
     let cameraViewM = Cam.toViewMatrix camera :: M44 GL.GLfloat
     -- Make the view matrix translation fixed so the gizmo is always in view.
-    viewM <- toGlMatrix . (translate (V3 0 0 (-100)) !*!)
+    viewM <- liftIO . toGlMatrix . (translate (V3 0 0 (-100)) !*!)
                . set translation 0 $ cameraViewM
-    viewMUniform $= viewM
-    projection <- toGlMatrix . perspectiveProjection . aspectRatio $ env
-    projectionMUniform $= (projection :: GL.GLmatrix GL.GLfloat)
-    GL.clear [GL.DepthBuffer]
-    withRenderer (renderMeshPrimitive pipeline) 0 (Quaternion 1 0) model
-    unbindPipeline
+    pipelineUniform pipeline "viewM" $= viewM
+    aspectRatio <- asks viewportAspectRatio
+    projection <- liftIO $ toGlMatrix . perspectiveProjection $ aspectRatio
+    pipelineUniform pipeline "projectionM"
+      $= (projection :: GL.GLmatrix GL.GLfloat)
+    liftIO . GL.clear $ [GL.DepthBuffer]
+    let globalTransforms = makeGlobalTransforms model Nothing
+    V.zipWithM_ renderNode (modelNodes model) globalTransforms
+    liftIO unbindPipeline
     return ()
  where
-  renderMeshPrimitive :: Pipeline -> M44 Float -> MeshPrimitive -> IO ()
-  renderMeshPrimitive pipeline modelMatrix' MeshPrimitive{..} = do
+  renderNode :: Node -> M44 Float -> Render ()
+  renderNode Node{..} bindMatrix = do
+    mapM_ (mapM_ (renderMeshPrimitive bindMatrix)) nodeMesh
+
+  renderMeshPrimitive :: M44 Float -> MeshPrimitive -> Render ()
+  renderMeshPrimitive bindMatrix' MeshPrimitive{..} = do
+    pipeline <- asks envPipeline
     let Material{..} = meshPrimMaterial
-    -- Set model matrix
-    modelMatrix <- toGlMatrix modelMatrix'
-    let modelMatrixUniform = pipelineUniform pipeline "modelM"
-    modelMatrixUniform $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set textures
     pipelineUniform pipeline "baseColorFactor"
       $= toGlVector4 materialBaseColorFactor
@@ -106,13 +107,16 @@ createDebugGizmoOverlayer = do
       $= maybe (0 :: GL.GLint) (const 1) materialBaseColorTexture
     GL.activeTexture $= GL.TextureUnit 0
     GL.textureBinding GL.Texture2D $= materialBaseColorTexture
+    -- Bind natrix
+    bindMatrix <- liftIO . toGlMatrix $ bindMatrix'
+    pipelineUniform pipeline "bindM" $= bindMatrix
     -- Draw
     GL.bindVertexArrayObject $= Just meshPrimVao
-    GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt
+    liftIO $ GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt
       nullPtr
     GL.bindVertexArrayObject $= Nothing
 
-createDebugInfoOverlayer :: IORef POSIXTime -> IO (RenderEnv -> Frame -> IO ())
+createDebugInfoOverlayer :: IORef POSIXTime -> IO (Frame -> Render ())
 createDebugInfoOverlayer timeRef = do
   font <- loadFont "bpdots.squares-bold"
   renderText <- createDebugTextRenderer
@@ -123,11 +127,10 @@ createDebugInfoOverlayer timeRef = do
   renderDebugText :: IORef [DeltaT]
     -> IORef (Maybe (POSIXTime, FpsStatistics))
     -> MsdfFont
-    -> (RenderEnv -> Text -> IO ())
-    -> RenderEnv
+    -> (Text -> Render ())
     -> Frame
-    -> IO ()
-  renderDebugText deltasRef fpsRef font renderText env (Input{..}, Output{..}) = do
+    -> Render ()
+  renderDebugText deltasRef fpsRef font renderText (Input{..}, Output{..}) = do
     let World{..} = outputWorld
         Camera{..} = worldCamera
         V3 camX camY camZ = camPos
@@ -158,31 +161,33 @@ createDebugInfoOverlayer timeRef = do
         printf "       (world)  %.5f %.5f %.5f" pointerX pointerY pointerZ
       ]
    where
-    renderLines :: [String] -> IO ()
+    renderLines :: [String] -> Render ()
     renderLines ls = do
       -- Defined in "debug text space". See Text module.
-      let screenTop = if aspectRatio env > 1
-                        then recip . aspectRatio $ env
+      aspectRatio <- asks viewportAspectRatio
+      let screenTop = if aspectRatio > 1
+                        then recip aspectRatio
                         else 1
-          screenLeft = negate . min 1 . aspectRatio $ env
+          screenLeft = negate . min 1 $ aspectRatio
           padding = 0.0125
           size = 0.02
           left = screenLeft + padding
           top line = screenTop - padding - line * size
-      GL.clear [GL.DepthBuffer]
+      liftIO $ GL.clear [GL.DepthBuffer]
       forM_ (zip [1..] ls) $ \(n, l) -> do
         -- TODO render text as one draw call
         t <- createDebugText font size (left, top n) l
-        renderText env t
+        renderText t
         deleteText t
 
-    fpsStats :: IO FpsStatistics
+    fpsStats :: Render FpsStatistics
     fpsStats = do
-      time' <- readIORef timeRef
-      when (inputDeltaT > 0) . modifyIORef deltasRef $ (inputDeltaT :)
-      deltas <- readIORef deltasRef
-      modifyIORef fpsRef (maybe (Just (time', FpsStatistics 0 0 0)) Just)
-      (lastUpdated, _) <- fmap fromJust . readIORef $ fpsRef
+      time' <- liftIO $ readIORef timeRef
+      when (inputDeltaT > 0) . liftIO . modifyIORef deltasRef $ (inputDeltaT :)
+      deltas <- liftIO $ readIORef deltasRef
+      liftIO $
+        modifyIORef fpsRef (maybe (Just (time', FpsStatistics 0 0 0)) Just)
+      (lastUpdated, _) <- fmap fromJust . liftIO . readIORef $ fpsRef
       -- Update the stored fps count every half second only if there are deltas
       when ((not . null $ deltas) && floor (time' * 2) > (floor (lastUpdated * 2) :: Int)) $ do
         let fpss = fmap recip deltas
@@ -197,11 +202,11 @@ createDebugInfoOverlayer timeRef = do
                       fpsLow = head fpss',
                       fpsHigh = fpss' !! (n - 1)
                     }
-        writeIORef fpsRef . Just $ (time', stats)
-        writeIORef deltasRef []
-      fmap (snd . fromJust) . readIORef $ fpsRef
+        liftIO . writeIORef fpsRef . Just $ (time', stats)
+        liftIO $ writeIORef deltasRef []
+      fmap (snd . fromJust) . liftIO . readIORef $ fpsRef
 
-createDebugQuadOverlayer :: GL.TextureObject -> IO (IO ())
+createDebugQuadOverlayer :: GL.TextureObject -> IO (Render ())
 createDebugQuadOverlayer texture = do
   -- Create and bind vertex array object before our vertex and element buffers
   vertexArrayObject <- GL.genObjectName
@@ -210,7 +215,7 @@ createDebugQuadOverlayer texture = do
   vertexBuffer <- GL.genObjectName
   GL.bindBuffer GL.ArrayBuffer $= Just vertexBuffer
   -- Load vertices into array buffer
-  withArray vertices $ \ptr -> do
+  liftIO $ withArray vertices $ \ptr -> do
     let size = fromIntegral $ length vertices * sizeOf (0.0 :: GL.GLfloat)
     GL.bufferData GL.ArrayBuffer $= (size, ptr, GL.StaticDraw)
   -- Define vertex attribute pointers
@@ -231,7 +236,7 @@ createDebugQuadOverlayer texture = do
   -- Unbind the vertex array object and buffer object
   GL.bindVertexArrayObject $= Nothing
   GL.bindBuffer GL.ArrayBuffer $= Nothing
-  pipeline <- compilePipeline [
+  pipeline <- liftIO $ compilePipeline [
       ("debug/depth-map-debug-quad", GL.FragmentShader),
       ("debug/depth-map-debug-quad", GL.VertexShader)
     ]
@@ -247,13 +252,14 @@ createDebugQuadOverlayer texture = do
        1, -1,  0,  1,  0
     ]
 
-  overlayDebugQuad :: Pipeline -> GL.VertexArrayObject -> IO ()
+  overlayDebugQuad :: Pipeline -> GL.VertexArrayObject -> Render ()
   overlayDebugQuad pipeline vertexArrayObject = do
-    bindPipeline pipeline
+    liftIO $ bindPipeline pipeline
     GL.activeTexture $= GL.TextureUnit 0
     GL.textureBinding GL.Texture2D $= Just texture
     GL.bindVertexArrayObject $= Just vertexArrayObject
-    GL.clear [GL.DepthBuffer]
-    GL.drawArrays GL.TriangleStrip 0 . fromIntegral $ length vertices `div` 5
+    liftIO $ GL.clear [GL.DepthBuffer]
+    liftIO $ GL.drawArrays GL.TriangleStrip 0 . fromIntegral $ length vertices
+               `div` 5
     GL.bindVertexArrayObject $= Nothing
     GL.textureBinding GL.Texture2D $= Nothing

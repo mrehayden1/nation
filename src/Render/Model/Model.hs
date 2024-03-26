@@ -1,14 +1,12 @@
 module Render.Model.Model (
   Model(..),
-  modelScene,
-  modelTranslation,
 
-  SceneNode(..),
-  nodeAnimations,
-  nodeMesh,
-  nodeRotation,
-  nodeScale,
-  nodeTranslation,
+  Node(..),
+  _nodeRotation,
+  _nodeScale,
+  _nodeTranslation,
+
+  G.Skin(..),
 
   Mesh,
 
@@ -25,10 +23,9 @@ module Render.Model.Model (
 
 import Control.Lens
 import Data.Map (Map)
+import Data.Proxy
 import Data.StateVar
 import Data.Text (Text)
-import Data.Tree
-import Data.Tree.Lens
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as SV
@@ -39,18 +36,33 @@ import Linear
 import qualified Text.GLTF.Loader as G
 
 data Model = Model {
-  _modelScene :: Tree SceneNode
+  modelName :: String,
+  modelNodes :: Vector Node,
+  modelScene :: Vector Int, -- node indices
+  modelSkins :: Vector G.Skin,
+  modelTranslation :: V3 Float
 } deriving (Show)
 
 -- TODO Do we need to increase strictness so all data loads ahead of render?
-data SceneNode = SceneNode {
-  _nodeAnimations :: Map Text [G.Channel],
-  _nodeMesh :: Maybe Mesh,
-  -- FIXME Handle optional transformation matrices (can be used instead of TRS)
-  _nodeRotation :: Quaternion Float,
-  _nodeScale :: V3 Float,
-  _nodeTranslation :: V3 Float
+data Node = Node {
+  nodeAnimations :: Map Text [G.Channel],
+  nodeChildren :: Vector Int,
+  nodeIsJoint :: Bool,
+  nodeMesh :: Maybe Mesh,
+  nodeRotation :: Quaternion Float,
+  nodeScale :: V3 Float,
+  nodeSkin :: Maybe Int,
+  nodeTranslation :: V3 Float
 } deriving (Show)
+
+_nodeRotation :: Lens' Node (Quaternion Float)
+_nodeRotation = lens nodeRotation (\n r -> n { nodeRotation = r })
+
+_nodeScale :: Lens' Node (V3 Float)
+_nodeScale = lens nodeScale (\n s -> n { nodeScale = s })
+
+_nodeTranslation :: Lens' Node (V3 Float)
+_nodeTranslation = lens nodeTranslation (\n t -> n { nodeTranslation = t })
 
 type Mesh = Vector MeshPrimitive
 
@@ -68,6 +80,8 @@ type Positions = Vector (V3 Float)
 type Normals = Vector (V3 Float)
 type Tangents = Vector (V4 Float)
 type TexCoords = Vector (V2 Float)
+type Joints = Vector (V4 Word16)
+type Weights = Vector (V4 Float)
 
 meshPrimitive :: Material
   -> GL.PrimitiveMode
@@ -76,8 +90,10 @@ meshPrimitive :: Material
   -> Normals
   -> Tangents
   -> TexCoords
+  -> Joints
+  -> Weights
   -> IO MeshPrimitive
-meshPrimitive material mode ixs positions normals tangents texCoords = do
+meshPrimitive material mode ixs positions normals tangents texCoords joints weights = do
   -- Create and bind VAO
   vao <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vao
@@ -89,39 +105,70 @@ meshPrimitive material mode ixs positions normals tangents texCoords = do
     let size = fromIntegral . (* sizeOf (undefined :: Word32)) $ numIxs
     GL.bufferData GL.ElementArrayBuffer $= (size, ptr, GL.StaticDraw)
   -- Load vertex data
+  let numVertices = V.length positions
   vbos <- sequence [
-      -- Position
       loadVertexAttribute 0 3 positions,
-      -- Normals
       loadVertexAttribute 1 3 normals,
-      -- Tangents
       loadVertexAttribute 2 4 tangents,
-      -- Texture co-ordinates
-      loadVertexAttribute 3 2 texCoords
+      loadVertexAttribute 3 2 texCoords,
+      -- Pad joints and weights with zeros if empty.
+      loadVertexAttribute 4 4
+        $ joints V.++ V.replicate (numVertices - length joints) 0,
+      loadVertexAttribute 5 4
+        $ weights V.++ V.replicate (numVertices - length weights) 0
     ]
   GL.bindVertexArrayObject $= Nothing
   GL.bindBuffer GL.ElementArrayBuffer $= Nothing
   GL.bindBuffer GL.ArrayBuffer $= Nothing
   return . MeshPrimitive material mode vao vbos ebo . fromIntegral $ numIxs
  where
+  loadVertexAttribute :: forall a. (Storable a, VertexAttribute a)
+    => Int
+    -> Int
+    -> Vector a
+    -> IO GL.BufferObject
   loadVertexAttribute location components attrs = do
     vbo <- GL.genObjectName
     GL.bindBuffer GL.ArrayBuffer $= Just vbo
     SV.unsafeWith (V.convert attrs) $ \ptr -> do
-      let size = fromIntegral . (* sizeOf (undefined :: Float))
+      let size = fromIntegral . (* sizeOf (undefined :: a))
                    . (* components) . length $ attrs
       GL.bufferData GL.ArrayBuffer $= (size, ptr, GL.StaticDraw)
-    let attrLoc = GL.AttribLocation location
+    let attrLoc = GL.AttribLocation . fromIntegral $ location
     GL.vertexAttribPointer attrLoc $=
-      (GL.ToFloat,
+      (integerHandling (Proxy :: Proxy a),
        GL.VertexArrayDescriptor
          (fromIntegral components)
-         GL.Float
+         (glDataType (Proxy :: Proxy a))
          0 -- stride=0, only one attribute per buffer
          nullPtr
       )
     GL.vertexAttribArray attrLoc $= GL.Enabled
     return vbo
+
+class VertexAttribute a where
+  integerHandling :: Proxy a -> GL.IntegerHandling
+  glDataType :: Proxy a -> GL.DataType
+
+instance VertexAttribute a => VertexAttribute (V2 a) where
+  integerHandling _ = integerHandling (Proxy :: Proxy a)
+  glDataType _ = glDataType (Proxy :: Proxy a)
+
+instance VertexAttribute a => VertexAttribute (V3 a) where
+  integerHandling _ = integerHandling (Proxy :: Proxy a)
+  glDataType _ = glDataType (Proxy :: Proxy a)
+
+instance VertexAttribute a => VertexAttribute (V4 a) where
+  integerHandling _ = integerHandling (Proxy :: Proxy a)
+  glDataType _ = glDataType (Proxy :: Proxy a)
+
+instance VertexAttribute Float where
+  integerHandling _ = GL.ToFloat
+  glDataType _ = GL.Float
+
+instance VertexAttribute Word16 where
+  integerHandling _ = GL.KeepIntegral
+  glDataType _ = GL.UnsignedShort
 
 data Material = Material {
   materialAlphaMode :: G.MaterialAlphaMode,
@@ -156,15 +203,13 @@ defaultMaterial = Material {
     materialBaseColorFactor = defaultBaseColorFactor,
     materialBaseColorTexture = Nothing,
     materialDoubleSided = False,
+--  materialEmissiveFactor = 0,
+--  materialEmissiveTexture = Nothing,
     materialMetallicFactor = defaultMetallicFactor,
     materialMetallicRoughnessTexture = Nothing,
     materialNormalTexture = Nothing,
     materialNormalTextureScale = 1,
+--  materialOcclusionTexture = Nothing,
+--  materialOcclusionTextureStrength = 1,
     materialRoughnessFactor = 1
   }
-
-$(makeLenses ''Model)
-$(makeLenses ''SceneNode)
-
-modelTranslation :: Lens' Model (V3 Float)
-modelTranslation = modelScene . root . nodeTranslation

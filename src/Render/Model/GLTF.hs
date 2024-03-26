@@ -8,7 +8,6 @@ import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
 import Data.Text (Text)
-import Data.Tree
 import Data.Vector (Vector, (!))
 import qualified Data.Vector as V
 import qualified Graphics.Rendering.OpenGL as GL
@@ -20,8 +19,8 @@ import qualified Render.Model.GLTF.Material as M
 import Render.Model.GLTF.Texture as GT
 import Render.Model.Model
 
-fromGlbFile :: FilePath -> IO Model
-fromGlbFile pathname = do
+fromGlbFile :: String -> FilePath -> IO Model
+fromGlbFile name pathname = do
   eGlb <- G.fromBinaryFile pathname
   gltf <- case eGlb of
     Left  _ -> fail "fromGlbFile: Failed to read GLB."
@@ -33,34 +32,45 @@ fromGlbFile pathname = do
                 . V.imap (\i t -> (i `elem` baseColorTextureIxs, t))
                 $ gltfTextures
   let materials = fmap (M.adaptMaterial textures) gltfMaterials
-  meshes <- mapM (mapM (loadMeshPrimitive materials) . G.meshPrimitives) gltfMeshes
-  let scene = makeSceneGraph gltfScenes gltfNodes gltfAnimations meshes
-  return $ Model scene
+  meshes <- mapM (mapM (loadMeshPrimitive materials) . G.meshPrimitives)
+              gltfMeshes
+  let nodes = makeNodes gltfNodes gltfAnimations gltfSkins meshes
+      -- FIXME Because we don't have a top level `scene` property yet, default
+      -- to the first scene in the list.
+      scene = G.sceneNodes . V.head $ gltfScenes
+  return $ Model name nodes scene gltfSkins 0
  where
-  getMaterialBaseColorTextureId = pure . G.textureId <=< G.pbrBaseColorTexture <=< G.materialPbrMetallicRoughness
+  getMaterialBaseColorTextureId = pure . G.textureId <=< G.pbrBaseColorTexture
+    <=< G.materialPbrMetallicRoughness
 
-  makeSceneGraph :: Vector G.Scene
-    -> Vector G.Node
+  -- TODO Decompose transformation matrices when given instead of TRS
+  -- properties.
+  makeNodes :: Vector G.Node
     -> Vector G.Animation
+    -> Vector Skin
     -> Vector Mesh
-    -> Tree SceneNode
-  makeSceneGraph scenes nodes animations meshes =
-    let rootIxs = G.sceneNodes . V.head $ scenes
-        -- Index every animation channel by node ID
-        animMap = indexAnimations . toList $ animations
-    in Node (SceneNode mempty Nothing (Quaternion 1 0) 1 0) . F.toList
-         . fmap (makeNode animMap) $ rootIxs
+    -> Vector Node
+  makeNodes nodes animations skins meshes =
+    V.imap makeSceneNode nodes
    where
-    makeNode :: Map Text (Map Int [G.Channel]) -> Int -> Tree SceneNode
-    makeNode animMap i =
-      let n = nodes ! i
-          r = fromMaybe (Quaternion 1 0) . G.nodeRotation $ n
-          s = fromMaybe 1 . G.nodeScale $ n
-          t = fromMaybe 0 . G.nodeTranslation $ n
-          ns = F.toList . fmap (makeNode animMap) . G.nodeChildren $ n
-          m = fmap (meshes !) . G.nodeMeshId $ n
-          as = M.mapMaybe (M.lookup i) animMap
-      in Node (SceneNode as m r s t) ns
+    jointNodes :: Vector Int
+    jointNodes = foldl' (flip $ (V.++) . skinJoints) mempty skins
+
+    animMap :: Map Text (Map Int [G.Channel])
+    animMap = indexAnimations . toList $ animations
+
+    makeSceneNode :: Int -> G.Node-> Node
+    makeSceneNode i node =
+      let anims = M.mapMaybe (M.lookup i) animMap
+          children = G.nodeChildren node
+          mesh = fmap (meshes !) . G.nodeMeshId $ node
+          rot = fromMaybe (Quaternion 1 0) . G.nodeRotation $ node
+          scale = fromMaybe 1 . G.nodeScale $ node
+          skin = G.nodeSkin node
+          trans = fromMaybe 0 . G.nodeTranslation $ node
+          isJoint = V.elem i jointNodes
+          --inverseBind = inv44 $ mkTransformation r t !*! scale s
+      in Node anims children isJoint mesh rot scale skin trans
 
   indexAnimations :: [G.Animation] -> Map Text (Map Int [G.Channel])
   indexAnimations = M.fromList . fmap ((,) <$> animationName <*> indexChannels)
@@ -79,19 +89,21 @@ fromGlbFile pathname = do
 
 loadMeshPrimitive :: Vector Material -> G.MeshPrimitive -> IO MeshPrimitive
 loadMeshPrimitive materials G.MeshPrimitive{..} = do
-  -- Do some checks
+  -- Do some checks for optional data that we need to be included in a GlTF/GLB
+  -- export to be able to render it.
   when (null meshPrimitiveIndices) . error
     $ "Mesh primitives are required to be indexed."
   when (null meshPrimitiveNormals) . error
-    $ "Mesh primitive missing normals."
+    $ "Mesh primitive missing required normals."
   when (null meshPrimitiveTangents) . error
-    $ "Mesh primitive missing tangents."
+    $ "Mesh primitive missing required tangents."
   when (null meshPrimitiveTexCoords) . error
-    $ "Mesh primitive missing texture co-ordinates."
+    $ "Mesh primitive missing required texture co-ordinates."
   let mode = toGlPrimitiveMode meshPrimitiveMode
       material = maybe defaultMaterial (materials !) meshPrimitiveMaterial
   meshPrimitive material mode meshPrimitiveIndices meshPrimitivePositions
     meshPrimitiveNormals meshPrimitiveTangents meshPrimitiveTexCoords
+    meshPrimitiveJoints meshPrimitiveWeights
 
 toGlPrimitiveMode :: G.MeshPrimitiveMode -> GL.PrimitiveMode
 toGlPrimitiveMode p = case p of

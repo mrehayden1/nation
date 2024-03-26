@@ -31,6 +31,7 @@ executable nation
       Matrix
       Model
       Quaternion
+      Render
       Render.Debug
       Render.Env
       Render.Model
@@ -55,6 +56,7 @@ executable nation
       AllowAmbiguousTypes
       DeriveGeneric
       FlexibleContexts
+      GeneralizedNewtypeDeriving
       LambdaCase
       OverloadedStrings
       RankNTypes
@@ -71,6 +73,7 @@ executable nation
     , JuicyPixels
     , JuicyPixels-extra
     , OpenGL
+    , OpenGLRaw
     , StateVar
     , aeson
     , base >=4.7 && <5

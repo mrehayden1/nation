@@ -6,13 +6,11 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Reader
 import Data.IORef
-import Data.Map
 import Data.Maybe
 import Data.StateVar
 import Data.Time.Clock.POSIX
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
-import Linear
 import Reflex
 import Reflex.GLFW.Simple
 import Reflex.Host.Headless
@@ -20,36 +18,38 @@ import Reflex.Network
 
 import App
 import Model
-import Render.Debug
-import Render.Env
+import Render
 import Render.Model
-import qualified Render.Scene as Scene
-import qualified Render.Scene.Shadow as Shadow
 
 appName :: String
 appName = "Nation"
 
-windowHeight', windowWidth' :: Int
-windowHeight' = 1080
-windowWidth' = 1920
+windowHeight, windowWidth :: Int
+windowHeight = 1080
+windowWidth = 1920
 
-appEnv :: Env
-appEnv = Env {
-  -- TODO Add debugging build flag?
+appEnv :: App.Env
+appEnv = App.Env {
   consoleDebuggingEnabled = False,
   debugInfoEnabledDefault = True,
+  envWindowHeight = windowHeight,
+  envWindowWidth = windowWidth,
   fullscreen = False,
   multisampleSubsamples = Msaa16x,
-  vsyncEnabled = False,
-  windowHeight = windowHeight',
-  windowWidth = windowWidth'
+  vsyncEnabled = False
 }
 
-renderEnv :: RenderEnv
-renderEnv = RenderEnv {
-  viewportHeight = windowHeight',
-  viewportWidth = windowWidth'
-}
+createRenderEnv :: IO Render.Env
+createRenderEnv = do
+  jointModel <- fromGlbFile "joint" "assets/models/joint.glb"
+  return $ Render.Env {
+    envJointModel = jointModel,
+    envPipeline = undefined, --- FIXME yucky
+    envRenderMeshes = True,
+    envShowJoints = False,
+    envViewportHeight = windowHeight,
+    envViewportWidth = windowWidth
+  }
 
 main :: IO ()
 main = do
@@ -61,13 +61,14 @@ main = do
     models <- loadModels
     -- Create renderer
     renderFrame <- createRenderer win timeRef models
+    renderEnv <- createRenderEnv
     -- Enter game loop
     runHeadlessApp $ do
       time <- liftIO getPOSIXTime
       -- Write the start time to the time ref assuming that the post build
       -- event will happen immediately afterwards
       liftIO $ writeIORef timeRef time
-      WindowReflexes {..} <- windowReflexes win
+      WindowReflexes{..} <- windowReflexes win
       -- Use the post build to create the first tick.
       ePostBuild <- getPostBuild
       (eTick, tickTrigger) <- newTriggerEvent
@@ -77,10 +78,10 @@ main = do
                     . fmap (\(k, _, s, m) -> (k, s, m))
       keysTick <- fmap join . networkHold (return $ pure [])
                     $ keys' key <$ eTick
-      let buttons = foldDyn (:) []
-                      . fmap (\(b, s, m) -> (b, s, m)) $ mouseButton
-      buttonsTick <- fmap join
-                       . networkHold (return $ pure []) $ buttons <$ eTick
+      let buttons = foldDyn (:) [] . fmap (\(b, s, m) -> (b, s, m))
+                      $ mouseButton
+      buttonsTick <- fmap join . networkHold (return $ pure [])
+                       $ buttons <$ eTick
       let eInput =
             attachPromptlyDynWith uncurry
               (Input <$> cursorPos <*> buttonsTick <*> keysTick)
@@ -92,7 +93,7 @@ main = do
       performEvent_
         . fmap (progressFrame timeRef
                               (liftIO . tickTrigger)
-                              (liftIO . renderFrame))
+                              (liftIO . flip runRender renderEnv . renderFrame))
         $ eFrame
       return eShutdown
  where
@@ -113,80 +114,9 @@ main = do
     -- Collect events to process in the next tick.
     liftIO GLFW.pollEvents
 
-createRenderer :: GLFW.Window
-                    -> IORef POSIXTime
-                    -> Map ModelName Model
-                    -> IO (Frame -> IO ())
-createRenderer win timeRef models = do
-  -- Create a depth buffer object and depth map texture
-  (shadowDepthMapTexture, renderShadowDepthMap)
-    <- Shadow.createShadowDepthMapper
-  renderScene <- Scene.createSceneRenderer shadowDepthMapTexture
-  overlayConsole <- createConsoleOverlayer
-  overlayDebugQuad <- createDebugQuadOverlayer shadowDepthMapTexture
-  overlayDebugInfo <- createDebugInfoOverlayer timeRef
-  overlayGizmo <- createDebugGizmoOverlayer
-  -- TODO Move this to it's own definition
-  -- React to changes in our Reflex application
-  return $ \frame@(_, Output{..}) -> do
-    -- TODO Move scene creation to its own definition
-    let World{..} = outputWorld
-        Daylight{..} = worldDaylight
-        scene = Scene.Scene {
-          sceneCamera = worldCamera,
-          sceneElements = [
-            {-
-            Scene.Element {
-              elementAnimation = Nothing,
-              elementModel = models ! Monument,
-              elementPosition = V3 3 0 3,
-              elementRotation = Quaternion 1 0
-            },
-            Scene.Element {
-              elementAnimation = Nothing,
-              elementModel = models ! Fauna,
-              elementPosition = V3 10 0 10,
-              elementRotation = Quaternion 1 0
-            }
-            -}
-            Scene.Element {
-              elementAnimation = Nothing,
-              elementModel = models ! Grass,
-              elementPosition = 0,
-              elementRotation = Quaternion 1 0
-            },
-            Scene.Element {
-              elementAnimation = Just ("spin", 5, worldAnimationTime),
-              elementModel = models ! Pointer,
-              elementPosition = worldPointerPosition,
-              elementRotation = Quaternion 1 0
-            },
-            Scene.Element {
-              elementAnimation = Nothing,
-              elementModel = models ! Horse,
-              elementPosition = worldPlayerPosition,
-              elementRotation = worldPlayerDirection
-            }
-          ],
-          sceneDaylight = Scene.Daylight {
-            daylightAmbientIntensity = daylightAmbientIntensity,
-            daylightPitch = daylightSunPitch,
-            daylightYaw = daylightSunYaw
-          }
-        }
-    renderShadowDepthMap scene
-    renderScene renderEnv scene
-    when outputDebugQuadOverlay overlayDebugQuad
-    when outputDebugInfoOverlay $ do
-      overlayDebugInfo renderEnv frame
-      unless outputDebugQuadOverlay . overlayGizmo renderEnv
-        $ worldCamera
-    when outputConsoleOpen $ overlayConsole renderEnv frame
-    GLFW.swapBuffers win
-
 initialiseGraphics :: IO GLFW.Window
 initialiseGraphics = do
-  let Env{..} = appEnv
+  let App.Env{..} = appEnv
   r <- GLFW.init
   unless r (error "GLFW.init error.")
   GLFW.defaultWindowHints

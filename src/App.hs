@@ -46,11 +46,11 @@ data Env = Env {
   multisampleSubsamples :: MsaaSubsamples,
   consoleDebuggingEnabled :: Bool,
   debugInfoEnabledDefault :: Bool,
+  envWindowHeight :: Int,
+  envWindowWidth :: Int,
   fullscreen :: Bool,
   -- TODO User savable settings
-  vsyncEnabled :: Bool,
-  windowHeight :: Int,
-  windowWidth :: Int
+  vsyncEnabled :: Bool
 }
 
 type Frame = (Input, Output)
@@ -98,8 +98,8 @@ data Output = Output {
 data Daylight = Daylight {
   daylightAmbientIntensity :: Float,
   -- Pointing at the sun
-  daylightSunPitch :: Float,
-  daylightSunYaw :: Float
+  daylightPitch :: Float,
+  daylightYaw :: Float
 }
 
 data World = World {
@@ -216,7 +216,7 @@ game eInput = do
   setPlayerCamera :: V3 Float -> Camera
   setPlayerCamera (V3 x _ z) =
     let th = (3 * pi) / 8
-        h  = 40
+        h  = 16
     in Camera {
          camPitch = negate th,
          -- always look at the player position
@@ -352,7 +352,7 @@ pointer cursorE cameraD = do
                    . foldDyn (flip $ (,) . snd) (0, 0)
                    . fmap (uncurry V2) $ cursorE
   fmap (fmap snd)
-    . foldDyn (updatePointer windowWidth windowHeight) (0, 0)
+    . foldDyn (updatePointer envWindowWidth envWindowHeight) (0, 0)
     . updated $ ((,) <$> cursorDelta <*> cameraD)
  where
   -- a pointer which remains within the bounds of a circle centered around the
