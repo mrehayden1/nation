@@ -3,18 +3,19 @@
 ## TODO
 
 ### Rendering
-[x] Base color factor scaling
+[] Order independent transparency
 [] Vertex colors
-[x] Metallic factor scaling
-[x] Roughness factor scaling
-[] Alpha coverage blend mode
-[] Alpha coverage opaque mode
-[x] Normal map scaling
-[x] Handle missing normal maps correctly (default 1px normal map is causing tangent seams)
 [] Ambient occlusion textures
 [] Emissive textures
-[] Shader bugs(?)
+[x] Base color factor scaling
+[x] Metallic factor scaling
+[x] Roughness factor scaling
+[x] Alpha coverage blend mode
+[x] Alpha coverage opaque mode
+[x] Normal map scaling
+[x] Handle missing normal maps correctly (default 1px normal map is causing tangent seams)
 
 ### Animations
-[] Keyframe interpolation
-[] Skinned meshes
+[] Blended animations
+[x] Keyframe interpolation
+[x] Skinned meshes

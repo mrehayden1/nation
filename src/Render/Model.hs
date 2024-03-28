@@ -18,7 +18,6 @@ import Control.Lens hiding (transform)
 import Data.Fixed
 import Data.Foldable as F
 import Data.Functor
-import Data.List
 import qualified Data.Map as M
 import Data.Maybe
 import Data.Text (Text)
