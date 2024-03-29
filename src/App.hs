@@ -173,9 +173,10 @@ game eInput = do
       . fmap inputDeltaT
       $ eInput
   -- Player camera
-    let playerCamera = pure $ setPlayerCamera playerStart
+    let playerCamera = fmap setPlayerCamera pointerD
   -- Pointer
-    pointerD <- pointer cursorE playerCamera
+    pointerD <- pointer cursorE (current playerCamera)
+      . current $ playerPosition
   -- Debug camera
   debugCam <- debugCamera deltaT playerCamera debugCameraOn heldKeys cursor
   let camera = debugCameraOn >>= \d -> if d then debugCam else playerCamera
@@ -345,47 +346,49 @@ buttons eInput = do
   updateHeldButtons b GLFW.MouseButtonState'Pressed  _ bs = insert b bs
   updateHeldButtons b GLFW.MouseButtonState'Released _ bs = delete b bs
 
-pointer :: Event t CursorPosition -> Dynamic t Camera -> App t (Dynamic t (V3 Float))
-pointer cursorE cameraD = do
+pointer :: Event t CursorPosition
+  -> Behavior t Camera
+  -> Behavior t (V3 Float)
+  -> App t (Dynamic t (V3 Float))
+pointer cursorE camera playerPos = do
   Env{..} <- ask
   cursorDelta <- fmap (fmap (uncurry $ flip (-)))
                    . foldDyn (flip $ (,) . snd) (0, 0)
                    . fmap (uncurry V2) $ cursorE
-  fmap (fmap snd)
-    . foldDyn (updatePointer envWindowWidth envWindowHeight) (0, 0)
-    . updated $ ((,) <$> cursorDelta <*> cameraD)
+  foldDyn (updatePointer envWindowWidth envWindowHeight) 0
+    . attachWith (uncurry (,,)) (liftA2 (,) camera playerPos) . updated $ cursorDelta
  where
   -- a pointer which remains within the bounds of a circle centered around the
   -- middle of the player
   updatePointer :: Int
     -> Int
-    -> (V2 Float, Camera)
-    -> (V2 Float, V3 Float)
-    -> (V2 Float, V3 Float)
-  updatePointer w h (delta, camera) (screenPos, _) =
-    let screenPos' = screenPos + delta
-        p@(V3 x _ z) = worldPosition w h camera screenPos'
-    in if x**2 + z**2 <= r**2
-         then (screenPos', p)
-         else let p' = normalize p * pure r
-              -- project the new pointer position back into screen space and
-              -- use that to calculate future updates
-              in (screenPosition w h camera p', p')
+    -> (Camera, V3 Float, V2 Float)
+    -> V3 Float
+    -> V3 Float
+  updatePointer w h (cam, plPos@(V3 plX _ plZ), delta) curPos =
+    -- project the new pointer position back into screen space and
+    -- use that to calculate future updates
+    let screenPos = screenPosition w h cam curPos
+        screenPos' = screenPos + delta
+        curPos'@(V3 x _ z) = worldPosition w h cam screenPos'
+    in if (x - plX)**2 + (z - plZ)**2 <= r**2
+         then curPos'
+         else plPos + (normalize (curPos' - plPos) * pure r)
    where
-    r = 20
+    r = 7
 
   -- The game pointer world coordinates on the plane y = 0
   worldPosition :: Int -> Int -> Camera -> V2 Float -> V3 Float
-  worldPosition screenWidth screenHeight camera (V2 cursorX cursorY) =
+  worldPosition screenWidth screenHeight cam (V2 cursorX cursorY) =
     let w = realToFrac screenWidth
         h = realToFrac screenHeight
         persM' = inversePerspectiveProjection $ w / h
-        viewM' = inv44 . toViewMatrix $ camera
+        viewM' = inv44 . toViewMatrix $ cam
         xNdc =  toNdc w cursorX
         yNdc = -toNdc h cursorY
         V4 viewX viewY _ _ = persM' !* V4 xNdc yNdc (-1) 1
         V4 v1 v2 v3 _ = viewM' !* V4 viewX viewY (-1) 0
-        V3 a b c = camPos camera
+        V3 a b c = camPos cam
         -- Using the vector equation of the line `(x,y,z) = (a,b,c) + tv` we
         -- solve t for y = 0 and calculate x and z
         t = -b / v2
@@ -397,10 +400,10 @@ pointer cursorE cameraD = do
     toNdc d a = 2 * (a - (d / 2)) / d
 
   screenPosition :: Int -> Int -> Camera -> V3 Float -> V2 Float
-  screenPosition screenWidth screenHeight camera pos =
+  screenPosition screenWidth screenHeight cam pos =
     let width = realToFrac screenWidth
         height = realToFrac screenHeight
         persM = perspectiveProjection $ width / height
-        viewM = toViewMatrix camera
+        viewM = toViewMatrix cam
         V4 x y _ w = persM !*! viewM !* point pos
     in (V2 width height * (V2 (x / w) (-y / w) + 1)) / 2

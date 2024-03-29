@@ -52,9 +52,21 @@ createRenderer win timeRef models = do
       sceneCamera = worldCamera,
       sceneElements = [
         Element {
+          elementAnimation = Nothing,
+          elementModel = models ! Grass,
+          elementPosition = 0,
+          elementRotation = Quaternion 1 0
+        },
+        Element {
           elementAnimation = Just ("spin", 5, worldAnimationTime),
           elementModel = models ! Pointer,
           elementPosition = worldPointerPosition,
+          elementRotation = Quaternion 1 0
+        },
+        Element {
+          elementAnimation = Just ("Spin", 2.08, worldAnimationTime),
+          elementModel = models ! Coin,
+          elementPosition = V3 1 0 1,
           elementRotation = Quaternion 1 0
         },
         Element {
@@ -62,39 +74,7 @@ createRenderer win timeRef models = do
           elementModel = models ! Horse,
           elementPosition = worldPlayerPosition,
           elementRotation = worldPlayerDirection
-        },
-        Element {
-          elementAnimation = Nothing,
-          elementModel = models ! Grass,
-          elementPosition = 0,
-          elementRotation = Quaternion 1 0
         }
-        {-
-        Element {
-          elementAnimation = Just ("Animation" , 3, worldAnimationTime),
-          elementModel = models ! Penguin,
-          elementPosition = 0,
-          elementRotation = Quaternion 1 0
-        },
-        Element {
-          elementAnimation = Just ("ArmatureAction" , 1, worldAnimationTime),
-          elementModel = models ! Cube,
-          elementPosition = 0,
-          elementRotation = Quaternion 1 0
-        }
-        Scene.Element {
-          elementAnimation = Nothing,
-          elementModel = models ! Monument,
-          elementPosition = V3 3 0 3,
-          elementRotation = Quaternion 1 0
-        },
-        Scene.Element {
-          elementAnimation = Nothing,
-          elementModel = models ! Fauna,
-          elementPosition = V3 10 0 10,
-          elementRotation = Quaternion 1 0
-        }
-        -}
       ],
       sceneDaylight = Scene.Daylight {
         daylightAmbientIntensity = daylightAmbientIntensity,

@@ -15,21 +15,19 @@ import Render.Model as Model
 import Render.Model.GLTF.Material as Mat
 
 data ModelName =
-    Cube
-  | Fauna
+    Coin
+  | Cube
   | Grass
   | Horse
-  | Monument
   | Pointer
  deriving (Eq, Ord)
 
 loadModels :: IO (Map ModelName Model)
 loadModels = fmap M.fromList . mapM (uncurry (fmap . (,))) $ [
     (Cube, loadModel "cube" "assets/models/animation-debug-cube.glb"),
-    (Fauna, loadModel "fauna" "assets/models/fauna.glb"),
+    (Coin, loadModel "coin" "assets/models/coin.glb"),
     (Grass, loadGrass),
     (Horse, loadModel "horse" "assets/models/horse.glb"),
-    (Monument, loadModel "monument" "assets/models/monument.glb"),
     (Pointer, loadModel "emerald" "assets/models/emerald.glb")
   ]
 
