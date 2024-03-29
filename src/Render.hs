@@ -6,7 +6,6 @@ module Render (
 
 import Control.Monad
 import Data.IORef
-import Data.Map
 import Data.Time.Clock.POSIX
 import qualified Graphics.UI.GLFW as GLFW
 import Linear
@@ -20,7 +19,7 @@ import Render.Scene.Shadow
 
 createRenderer :: GLFW.Window
                     -> IORef POSIXTime
-                    -> Map ModelName Model
+                    -> Models
                     -> IO (Frame -> Render ())
 createRenderer win timeRef models = do
   -- Create a depth buffer object and depth map texture
@@ -53,25 +52,25 @@ createRenderer win timeRef models = do
       sceneElements = [
         Element {
           elementAnimation = Nothing,
-          elementModel = models ! Grass,
+          elementModel = getModel models Grass,
           elementPosition = 0,
           elementRotation = Quaternion 1 0
         },
         Element {
           elementAnimation = Just ("spin", 5, worldAnimationTime),
-          elementModel = models ! Pointer,
+          elementModel = getModel models Pointer,
           elementPosition = worldPointerPosition,
           elementRotation = Quaternion 1 0
         },
         Element {
           elementAnimation = Just ("Spin", 2.08, worldAnimationTime),
-          elementModel = models ! Coin,
+          elementModel = getModel models Coin,
           elementPosition = V3 1 0 1,
           elementRotation = Quaternion 1 0
         },
         Element {
           elementAnimation = Just ("Gallop" , 0.67, worldAnimationTime),
-          elementModel = models ! Horse,
+          elementModel = getModel models Horse,
           elementPosition = worldPlayerPosition,
           elementRotation = worldPlayerDirection
         }

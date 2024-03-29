@@ -1,13 +1,15 @@
 module Model (
   Model,
   ModelName(..),
-  loadModels
+  Models,
+
+  loadModels,
+  getModel
 ) where
 
-import Data.Map (Map)
-import qualified Data.Map as M
-import Data.Vector ((!))
-import qualified Data.Vector as V
+import Data.Map as M
+import Data.Maybe
+import Data.Vector as V hiding (mapM)
 import Linear
 import Text.Printf
 
@@ -20,10 +22,12 @@ data ModelName =
   | Grass
   | Horse
   | Pointer
- deriving (Eq, Ord)
+ deriving (Eq, Ord, Show)
 
-loadModels :: IO (Map ModelName Model)
-loadModels = fmap M.fromList . mapM (uncurry (fmap . (,))) $ [
+newtype Models = Models { unModels :: Map ModelName Model }
+
+loadModels :: IO Models
+loadModels = fmap (Models . M.fromList) . mapM (uncurry (fmap . (,))) $ [
     (Cube, loadModel "cube" "assets/models/animation-debug-cube.glb"),
     (Coin, loadModel "coin" "assets/models/coin.glb"),
     (Grass, loadGrass),
@@ -48,7 +52,7 @@ loadGrass = do
                     V2 (-50)   50 ,
                     V2   50    50 ,
                     V2   50  (-50)]
-  prim <- meshPrimitive (materials ! 0) Triangles indices positions normals
+  prim <- meshPrimitive (materials V.! 0) Triangles indices positions normals
             tangents texCoords mempty mempty
   let mesh = V.fromList [prim]
       node = Node mempty mempty False (Just mesh) (Quaternion 1 0) 1 Nothing 0
@@ -63,3 +67,8 @@ loadModel name pathname = do
 
 printFileName :: FilePath -> IO ()
 printFileName = printf "Loading model \"%s\"...\n"
+
+getModel :: Models -> ModelName -> Model
+getModel models name =
+  fromMaybe (error . printf "%s model not found" . show $ name)
+    . (unModels models M.!?) $ name
