@@ -3,6 +3,7 @@ module Render.Scene.Shadow (
 ) where
 
 import Control.Lens
+import Control.Monad
 import Control.Monad.Reader
 import Data.StateVar
 import Data.Vector (Vector)
@@ -91,12 +92,13 @@ createShadowMapper = do
 
   renderElement :: Element -> Render ()
   renderElement Element{..} = do
-    let modelMatrix = mkTransformation elementRotation elementPosition
-        globalTransforms = makeGlobalTransforms elementModel elementAnimation
-        jointMatrices = fmap (makeJointMatrices globalTransforms) modelSkins
-        Model{..} = elementModel
-    V.zipWithM_ (renderNode modelMatrix jointMatrices) globalTransforms
-      modelNodes
+    when elementShadow $ do
+      let modelMatrix = mkTransformation elementRotation elementPosition
+          globalTransforms = makeGlobalTransforms elementModel elementAnimation
+          jointMatrices = fmap (makeJointMatrices globalTransforms) modelSkins
+          Model{..} = elementModel
+      V.zipWithM_ (renderNode modelMatrix jointMatrices) globalTransforms
+        modelNodes
 
   renderNode :: M44 Float
     -> Vector (Vector (M44 Float))

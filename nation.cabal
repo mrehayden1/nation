@@ -28,8 +28,9 @@ executable nation
       App
       Camera
       Cursor
+      Entity
+      Entity.Collision
       Matrix
-      Model
       Quaternion
       Render
       Render.Debug
@@ -47,6 +48,7 @@ executable nation
       Render.Text
       Render.Text.Font.MSDF
       Render.Texture
+      Render.UI
       Render.Util
       Vector
       Paths_nation

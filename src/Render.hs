@@ -11,21 +11,24 @@ import qualified Graphics.UI.GLFW as GLFW
 import Linear
 
 import App hiding (Env)
-import Model
+import Entity
+import Quaternion as Q
 import Render.Debug
 import Render.Env
 import Render.Scene as Scene
 import Render.Scene.Shadow
+import Render.UI
 
 createRenderer :: GLFW.Window
                     -> IORef POSIXTime
-                    -> Models
+                    -> Entities
                     -> IO (Frame -> Render ())
-createRenderer win timeRef models = do
+createRenderer win timeRef Entities{..} = do
   -- Create a depth buffer object and depth map texture
   (shadowMapTexture, renderShadowMap)
     <- createShadowMapper
   renderScene <- createSceneRenderer shadowMapTexture
+  renderUi <- createUiRenderer
   overlayConsole <- createConsoleOverlayer
   overlayDebugQuad <- createDebugQuadOverlayer shadowMapTexture
   overlayDebugInfo <- createDebugInfoOverlayer timeRef
@@ -37,6 +40,7 @@ createRenderer win timeRef models = do
         scene = makeScene frame
     renderShadowMap scene
     renderScene scene
+    renderUi frame
     when outputDebugQuadOverlay overlayDebugQuad
     when outputDebugInfoOverlay $ do
       overlayDebugInfo frame
@@ -50,29 +54,30 @@ createRenderer win timeRef models = do
     in Scene {
       sceneCamera = worldCamera,
       sceneElements = [
+        -- Grass
         Element {
           elementAnimation = Nothing,
-          elementModel = getModel models Grass,
+          elementModel = grassModel entitiesGrass,
           elementPosition = 0,
-          elementRotation = Quaternion 1 0
+          elementRotation = identityQuaternion,
+          elementShadow = True
         },
+        -- Pointer
         Element {
           elementAnimation = Just ("spin", 5, worldAnimationTime),
-          elementModel = getModel models Pointer,
+          elementModel = pointerModel entitiesPointer,
           elementPosition = worldPointerPosition,
-          elementRotation = Quaternion 1 0
-        },
-        Element {
-          elementAnimation = Just ("Spin", 2.08, worldAnimationTime),
-          elementModel = getModel models Coin,
-          elementPosition = V3 1 0 1,
-          elementRotation = Quaternion 1 0
-        },
+          elementRotation = identityQuaternion,
+          elementShadow = False
+        }
+      ] ++ fmap (mkCoin worldAnimationTime) worldCoins ++ [
+        -- Horse
         Element {
           elementAnimation = Just ("Gallop" , 0.67, worldAnimationTime),
-          elementModel = getModel models Horse,
+          elementModel = playerModel entitiesPlayer,
           elementPosition = worldPlayerPosition,
-          elementRotation = worldPlayerDirection
+          elementRotation = Q.fromVectors (V3 1 0 0) worldPlayerDirection,
+          elementShadow = True
         }
       ],
       sceneDaylight = Scene.Daylight {
@@ -81,3 +86,12 @@ createRenderer win timeRef models = do
         daylightYaw = daylightYaw
       }
     }
+   where
+    mkCoin t (V3 x y z) =
+      Element {
+        elementAnimation = Just ("Spin", 2.08, t),
+        elementModel = coinModel entitiesCoin,
+        elementPosition = V3 x y z,
+        elementRotation = identityQuaternion,
+        elementShadow = True
+      }

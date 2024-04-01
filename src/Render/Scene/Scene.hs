@@ -26,7 +26,8 @@ data Element = Element {
   elementAnimation :: Maybe Animation,
   elementModel :: Model,
   elementPosition :: V3 Float,
-  elementRotation :: Quaternion Float
+  elementRotation :: Quaternion Float,
+  elementShadow :: Bool
 }
 
 type Animation = (AnimationName, AnimationDuration, AnimationTime)

@@ -17,7 +17,7 @@ import Reflex.Host.Headless
 import Reflex.Network
 
 import App
-import Model
+import Entity
 import Render
 import Render.Model
 
@@ -28,16 +28,17 @@ windowHeight, windowWidth :: Int
 windowHeight = 1080
 windowWidth = 1920
 
-appEnv :: App.Env
-appEnv = App.Env {
-  consoleDebuggingEnabled = False,
-  debugInfoEnabledDefault = True,
-  envWindowHeight = windowHeight,
-  envWindowWidth = windowWidth,
-  fullscreen = False,
-  multisampleSubsamples = Msaa16x,
-  vsyncEnabled = False
-}
+consoleDebuggingEnabled :: Bool
+consoleDebuggingEnabled = False
+
+fullscreen :: Bool
+fullscreen = False
+
+multisampleSubsamples :: MsaaSubsamples
+multisampleSubsamples = Msaa16x
+
+vsyncEnabled :: Bool
+vsyncEnabled = False
 
 createRenderEnv :: IO Render.Env
 createRenderEnv = do
@@ -58,11 +59,16 @@ main = do
     -- Used to get the time the frame was last refreshed
     timeRef <- newIORef 0
     -- Create graphics elements
-    models <- loadModels
+    entities <- loadEntities
     -- Create renderer
-    renderFrame <- createRenderer win timeRef models
+    renderFrame <- createRenderer win timeRef entities
     renderEnv <- createRenderEnv
     -- Enter game loop
+    let appEnv = App.Env {
+      envEntities = entities,
+      envWindowHeight = windowHeight,
+      envWindowWidth = windowWidth
+    }
     runHeadlessApp $ do
       time <- liftIO getPOSIXTime
       -- Write the start time to the time ref assuming that the post build
@@ -116,7 +122,6 @@ main = do
 
 initialiseGraphics :: IO GLFW.Window
 initialiseGraphics = do
-  let App.Env{..} = appEnv
   r <- GLFW.init
   unless r (error "GLFW.init error.")
   GLFW.defaultWindowHints

@@ -42,28 +42,26 @@ data FpsStatistics = FpsStatistics {
 --  - Refactor out screen position logic
 createConsoleOverlayer :: IO (Frame -> Render ())
 createConsoleOverlayer = do
-  renderText <- createDebugTextRenderer
+  renderText <- createTextRenderer
   font <- loadFont "bpdots.squares-bold"
   return $ renderConsole renderText font
  where
-  renderConsole :: (Text -> Render ())
+  renderConsole :: (Text -> Bool -> Render ())
     -> MsdfFont
     -> Frame
     -> Render ()
   renderConsole renderText font (_, Output{..}) = do
     -- FIXME duplicated from renderLines
     aspectRatio <- asks viewportAspectRatio
-    let screenBottom = if aspectRatio > 1
-                         then negate . recip $ aspectRatio
-                         else -1
-        screenLeft = negate . min 1 $ aspectRatio
+    let bottom = if aspectRatio > 1
+                   then negate . recip $ aspectRatio
+                   else -1
+        left = negate . min 1 $ aspectRatio
         size = 0.02
-        left = screenLeft
-        bottom = screenBottom
     liftIO $ GL.clear [GL.DepthBuffer]
-    t <- createDebugText font size (left, bottom) $ "> " ++ outputConsoleText
+    t <- createText font size (left, bottom) $ "> " ++ outputConsoleText
            ++ "_"
-    renderText t
+    renderText t True
     deleteText t
 
 createDebugGizmoOverlayer :: IO (Camera -> Render ())
@@ -119,7 +117,7 @@ createDebugGizmoOverlayer = do
 createDebugInfoOverlayer :: IORef POSIXTime -> IO (Frame -> Render ())
 createDebugInfoOverlayer timeRef = do
   font <- loadFont "bpdots.squares-bold"
-  renderText <- createDebugTextRenderer
+  renderText <- createTextRenderer
   deltasRef <- newIORef []
   fpsRef <- newIORef Nothing
   return . renderDebugText deltasRef fpsRef font $ renderText
@@ -127,7 +125,7 @@ createDebugInfoOverlayer timeRef = do
   renderDebugText :: IORef [DeltaT]
     -> IORef (Maybe (POSIXTime, FpsStatistics))
     -> MsdfFont
-    -> (Text -> Render ())
+    -> (Text -> Bool -> Render ())
     -> Frame
     -> Render ()
   renderDebugText deltasRef fpsRef font renderText (Input{..}, Output{..}) = do
@@ -176,8 +174,8 @@ createDebugInfoOverlayer timeRef = do
       liftIO $ GL.clear [GL.DepthBuffer]
       forM_ (zip [1..] ls) $ \(n, l) -> do
         -- TODO render text as one draw call
-        t <- createDebugText font size (left, top n) l
-        renderText t
+        t <- createText font size (left, top n) l
+        renderText t True
         deleteText t
 
     fpsStats :: Render FpsStatistics

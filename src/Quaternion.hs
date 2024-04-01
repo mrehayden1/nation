@@ -1,5 +1,7 @@
 module Quaternion (
-  fromVectors
+  fromVectors,
+
+  identityQuaternion
 ) where
 
 import Linear
@@ -15,3 +17,6 @@ fromVectors a b =
  where
   mag2 :: V3 a -> a
   mag2 = sum . fmap (**2)
+
+identityQuaternion :: Quaternion Float
+identityQuaternion = Quaternion 1 0

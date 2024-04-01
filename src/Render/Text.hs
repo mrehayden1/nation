@@ -2,13 +2,14 @@ module Render.Text (
   Text,
   deleteText,
 
-  createDebugText,
-  createDebugTextRenderer,
+  createText,
+  createTextRenderer,
 
   MsdfFont,
   loadFont
 ) where
 
+import Control.Monad
 import Data.Char
 import Data.Maybe
 import Data.StateVar
@@ -45,8 +46,8 @@ data TextBackground = TextBackground {
 -- Create a renderer that renders text in "debug text space" which has -1 and 1
 -- touching the edges of the longest axis of the viewport (in practice this
 -- will be along the x-axis)
-createDebugTextRenderer :: IO (Text -> Render ())
-createDebugTextRenderer = do
+createTextRenderer :: IO (Text -> Bool -> Render ())
+createTextRenderer = do
   textPipeline <- compilePipeline [
       ("text", VertexShader),
       ("text", FragmentShader)
@@ -55,8 +56,9 @@ createDebugTextRenderer = do
       ("text-background", VertexShader),
       ("text-background", FragmentShader)
     ]
-  return $ \text -> do
-    renderBackground backgroundPipeline text
+  return $ \text background -> do
+    when background $
+      renderBackground backgroundPipeline text
     renderText textPipeline text
  where
   renderText :: Pipeline -> Text -> Render ()
@@ -103,8 +105,8 @@ createDebugTextRenderer = do
       else let r = -aspectRatio      in L.ortho (-r) r (-1) 1 1 (-1)
 
 -- createDebugText - positioned in "text space" with ems as the unit
-createDebugText :: MsdfFont -> Scale -> Origin -> String -> Render Text
-createDebugText font@MsdfFont{..} scale' origin str = do
+createText :: MsdfFont -> Scale -> Origin -> String -> Render Text
+createText font@MsdfFont{..} scale' origin str = do
   let MsdfFontMeta{..} = meta
       sizeOfVertexUnit = sizeOf (undefined :: GL.GLfloat) :: Int
       glyphMap = unGlyphMap glyphs

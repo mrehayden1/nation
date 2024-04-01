@@ -6,24 +6,26 @@ module Matrix (
   directionalLightViewMatrix,
 
   scale,
+  scale2D,
   translate,
+  translate2D,
   rotateX,
   rotateY,
   rotateZ,
+  rotate2D,
 
   toGlMatrix
 ) where
 
 import Data.Foldable
 import qualified Graphics.Rendering.OpenGL as GL
-import qualified Linear as L
-import Linear (Epsilon(..), V3(..), V4(..), M44)
+import Linear
 
 import Vector
 
 -- Calculate the projection needed to build a depth map for directional light
 directionalLightProjection :: (Epsilon a, Floating a) => M44 a
-directionalLightProjection = L.ortho (-10) 10 (-10) 10 10 (-10)
+directionalLightProjection = ortho (-10) 10 (-10) 10 10 (-10)
 
 {-
 type DirectionalLight a = Floating a => V3 a
@@ -68,17 +70,17 @@ directionalLightViewMatrix pitch yaw =
       -- the 'centre' to which the camera is looking
       centre = V3 0 0 0
       -- no camera roll so the camera is always on the x-z plane
-      right  = L.V3 (sin yaw) 0 (cos yaw)
-      up     = right `L.cross` dir -- camera's up
-  in L.lookAt (negate dir) centre up
+      right  = V3 (sin yaw) 0 (cos yaw)
+      up     = right `cross` dir -- camera's up
+  in lookAt (negate dir) centre up
 
 perspectiveProjection :: Floating a => a -> M44 a
 perspectiveProjection aspectRatio =
-  L.perspective (fov * pi / 180) aspectRatio near far
+  perspective (fov * pi / 180) aspectRatio near far
 
 inversePerspectiveProjection :: Floating a => a -> M44 a
 inversePerspectiveProjection aspectRatio =
-  L.inversePerspective (fov * pi / 180) aspectRatio near far
+  inversePerspective (fov * pi / 180) aspectRatio near far
 
 scale :: Num a => V3 a -> M44 a
 scale (V3 x y z) =
@@ -87,12 +89,24 @@ scale (V3 x y z) =
      (V4 0 0 z 0)
      (V4 0 0 0 1)
 
+scale2D :: Num a => V2 a -> M33 a
+scale2D (V2 x y) =
+  V3 (V3 x 0 0)
+     (V3 0 y 0)
+     (V3 0 0 1)
+
 translate :: Num a => V3 a -> M44 a
 translate (V3 x y z) =
   V4 (V4 1 0 0 x)
      (V4 0 1 0 y)
      (V4 0 0 1 z)
      (V4 0 0 0 1)
+
+translate2D :: Num a => V2 a -> M33 a
+translate2D (V2 x y) =
+  V3 (V3 1 0 x)
+     (V3 0 1 y)
+     (V3 0 0 1)
 
 rotateX :: Floating a => a -> M44 a
 rotateX t =
@@ -114,6 +128,12 @@ rotateZ t =
      (V4 (sin t) ( cos t) 0 0)
      (V4       0        0 1 0)
      (V4       0        0 0 1)
+
+rotate2D :: Floating a => a -> M33 a
+rotate2D t =
+  V3 (V3 (cos t) (-sin t) 0)
+     (V3 (sin t) ( cos t) 0)
+     (V3      0        0  1)
 
 -- unpack in row major order
 unpack :: (Foldable t1, Foldable t2) => t1 (t2 a) -> [a]

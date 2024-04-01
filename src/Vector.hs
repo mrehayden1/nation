@@ -3,7 +3,10 @@ module Vector (
   toGlVector4,
 
   eulerDirection,
-  magnitude
+  magnitude,
+  magnitude2,
+
+  point2D
 ) where
 
 import qualified Graphics.Rendering.OpenGL as GL
@@ -24,4 +27,10 @@ eulerDirection pitch yaw =
   in normalize $ V3 x y z
 
 magnitude :: (Functor t, Foldable t, Floating a) => t a -> a
-magnitude = sqrt . sum . fmap (**2)
+magnitude = sqrt . magnitude2
+
+magnitude2 :: (Functor t, Foldable t, Floating a) => t a -> a
+magnitude2 = sum . fmap (**2)
+
+point2D :: Num a => V2 a -> V3 a
+point2D (V2 x y) = V3 x y 1

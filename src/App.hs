@@ -12,10 +12,6 @@ module App (
   World(..),
   Daylight(..),
 
-  PlayerPosition,
-  PosX,
-  PosZ,
-
   game
 ) where
 
@@ -24,7 +20,7 @@ import Control.Monad.Fix
 import Control.Monad.Reader
 import Data.Fixed
 import Data.Functor
-import Data.List (delete, insert)
+import Data.List (delete, insert, partition)
 import Data.Time.Clock
 import Data.Tuple.Extra
 import qualified Graphics.UI.GLFW as GLFW
@@ -35,22 +31,18 @@ import Reflex.Network
 import Camera
 import qualified Camera as Cam
 import Cursor
+import Entity
+import Entity.Collision
 import Matrix
-import Quaternion as Q
 import Vector
 
 data MsaaSubsamples = MsaaNone | Msaa2x | Msaa4x | Msaa8x | Msaa16x
   deriving (Eq, Enum)
 
 data Env = Env {
-  multisampleSubsamples :: MsaaSubsamples,
-  consoleDebuggingEnabled :: Bool,
-  debugInfoEnabledDefault :: Bool,
+  envEntities :: Entities,
   envWindowHeight :: Int,
-  envWindowWidth :: Int,
-  fullscreen :: Bool,
-  -- TODO User savable settings
-  vsyncEnabled :: Bool
+  envWindowWidth :: Int
 }
 
 type Frame = (Input, Output)
@@ -105,15 +97,13 @@ data Daylight = Daylight {
 data World = World {
   worldAnimationTime :: Float,
   worldCamera :: Camera,
+  worldCoins :: [V3 Float],
   worldDaylight :: Daylight,
-  worldPlayerDirection :: Quaternion Float,
+  worldPlayerCoins :: Int,
+  worldPlayerDirection :: V3 Float,
   worldPlayerPosition :: V3 Float,
   worldPointerPosition :: V3 Float
 }
-
-type PosX = Float
-type PosZ = Float
-type PlayerPosition = (PosX, PosZ)
 
 playerStart :: V3 Float
 playerStart = V3 0 0 0
@@ -133,7 +123,6 @@ type App t a = forall m. (Adjustable t m, MonadFix m, MonadHold t m,
 
 game :: forall t. Event t Input -> App t (Dynamic t Frame)
 game eInput = do
-  Env{..} <- ask
   deltaT <- holdDyn 0 . fmap inputDeltaT $ eInput
   animationT <- foldDyn ((+) . realToFrac) 0 . fmap inputDeltaT $ eInput
   -- Keys
@@ -153,7 +142,7 @@ game eInput = do
     $ keyPresses
   overlayDebugQuad <- toggle False
     . ffilter (elem keyDebugQuadToggle . fmap fst) $ keyPresses
-  overlayDebugInfo <- toggle debugInfoEnabledDefault
+  overlayDebugInfo <- toggle False
     . ffilter (elem keyDebugInfoToggle . fmap fst) $ keyPresses
   debugCameraOn <- toggle False
     . ffilter (elem keyDebugCameraToggle . fmap fst)
@@ -184,12 +173,17 @@ game eInput = do
   sunPitch <- foldDyn (uncurry updateSunPitch) (pi / 2) . updated
     $ (,) <$> deltaT <*> heldKeys
   let ambientLight = fmap ((* 1) . max 0 . sin) sunPitch
+  -- Coins
+  (coinsPositions, collectedCoinsE) <- coins playerPosition playerDirection
+  playerCoins <- foldDyn (+) 0 collectedCoinsE
   -- Output
-      worldState = World
+  let worldState = World
         <$> animationT
         <*> camera
+        <*> coinsPositions
         <*> (Daylight <$> ambientLight <*> sunPitch <*> pure (pi / 8))
-        <*> fmap (Q.fromVectors (V3 1 0 0)) playerDirection
+        <*> playerCoins
+        <*> playerDirection
         <*> playerPosition
         <*> pointerD
       output = Output
@@ -291,6 +285,44 @@ game eInput = do
       keyVelocity GLFW.Key'S = negate . Cam.direction $ camera
       keyVelocity GLFW.Key'D = Cam.right camera
       keyVelocity _          = V3 0 0 0
+
+coins :: Dynamic t (V3 Float)
+  -> Dynamic t (V3 Float)
+  -> App t (Dynamic t [V3 Float], Event t Int)
+coins playerPosition playerDirection = do
+  Entities{..} <- asks envEntities
+  coinPositionsAndCoinsCollected <-
+    foldDyn (uncurry . collectCoins entitiesPlayer $ entitiesCoin)
+            (initialCoins, 0)
+      . updated . liftA2 (,) playerPosition $ playerDirection
+  let live = fmap fst coinPositionsAndCoinsCollected
+      collected = updated . fmap snd $ coinPositionsAndCoinsCollected
+  return (live, collected)
+ where
+  initialCoins = [V3 5 0 5, V3 (-5) 0 5, V3 (-5) 0 (-5), V3 5 0 (-5)]
+
+  collectCoins :: Player
+    -> Coin
+    -> V3 Float
+    -> V3 Float
+    -> ([V3 Float], Int)
+    -> ([V3 Float], Int)
+  collectCoins playerEntity coinEntity pos dir (cs, _) =
+    let playerCollision' = transformCollision playerTransform
+          . playerCollision $ playerEntity
+        (V3 px _ pz) = pos
+        (V3 dx _ dz) = dir
+        rot = atan (dz/dx)
+        playerTransform = translate2D (V2 px pz) !*! rotate2D rot
+        (cs', collected) =
+          partition (not . coinCollided playerCollision') cs
+    in (cs', length collected)
+   where
+    coinCollided :: Collision -> V3 Float -> Bool
+    coinCollided playerCollision' (V3 x _ z) =
+      let coinCollision' = coinCollision coinEntity
+      in collided playerCollision' . flip transformCollision coinCollision'
+          . translate2D $ V2 x z
 
 console :: Dynamic t Bool
   -> Event t [(GLFW.Key, GLFW.ModifierKeys)]
