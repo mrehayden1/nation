@@ -18,6 +18,7 @@ import Render.Env
 import Render.Scene as Scene
 import Render.Scene.Shadow
 import Render.UI
+import Vector
 
 createRenderer :: GLFW.Window
                     -> IORef POSIXTime
@@ -73,7 +74,9 @@ createRenderer win timeRef Entities{..} = do
       ] ++ fmap (mkCoin worldAnimationTime) worldCoins ++ [
         -- Horse
         Element {
-          elementAnimation = Just ("Gallop" , 0.67, worldAnimationTime),
+          elementAnimation = if magnitude2 worldPlayerVelocity > 0
+            then Just ("Gallop" , 0.67, worldAnimationTime)
+            else Just ("Idle2", 6, worldAnimationTime),
           elementModel = playerModel entitiesPlayer,
           elementPosition = worldPlayerPosition,
           elementRotation = Q.fromVectors (V3 1 0 0) worldPlayerDirection,

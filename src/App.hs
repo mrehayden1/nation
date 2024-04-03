@@ -102,15 +102,15 @@ data World = World {
   worldPlayerCoins :: Int,
   worldPlayerDirection :: V3 Float,
   worldPlayerPosition :: V3 Float,
+  worldPlayerVelocity :: V3 Float,
   worldPointerPosition :: V3 Float
 }
 
-playerStart :: V3 Float
-playerStart = V3 0 0 0
+playerStartPosition :: V3 Float
+playerStartPosition = V3 0 0 0
 
--- Meters per second
-playerSpeed :: Float
-playerSpeed = 4.5
+playerStartDirection :: V3 Float
+playerStartDirection = V3 0 0 0
 
 epsilon :: Float
 epsilon = 0.01
@@ -149,16 +149,17 @@ game eInput = do
     . gate (current . fmap not $ consoleOpen) $ keyPresses
   -- Player position
   rec
-    moveSelection <- holdDyn (playerStart + V3 epsilon 0 0)
+    moveSelection <- holdDyn (playerStartPosition + V3 epsilon 0 0)
       . tag (current pointerD) $ clicks
-    let playerDirection = (normalize .) . (-)
-                            <$> moveSelection <*> playerPosition
-        playerVelocity = calculatePlayerVelocity
-                            <$> moveSelection <*> playerPosition
-    playerPosition <- foldDyn (+) playerStart
+    playerVelocity' <- playerVelocity deltaT playerVelocityCurrent
+                         moveSelection playerPosition
+    let playerVelocityCurrent = current playerVelocity'
+    playerDirection <- holdDyn playerStartDirection . ffilter (/= 0)
+      . updated $ playerVelocity'
+    playerPosition <- foldDyn (+) playerStartPosition
       . attachWith
           ((. realToFrac) . (^*))
-          (current playerVelocity)
+          (current playerVelocity')
       . fmap inputDeltaT
       $ eInput
   -- Player camera
@@ -174,7 +175,7 @@ game eInput = do
     $ (,) <$> deltaT <*> heldKeys
   let ambientLight = fmap ((* 1) . max 0 . sin) sunPitch
   -- Coins
-  (coinsPositions, collectedCoinsE) <- coins playerPosition playerDirection
+  (coinsPositions, collectedCoinsE) <- coins playerPosition playerVelocity'
   playerCoins <- foldDyn (+) 0 collectedCoinsE
   -- Output
   let worldState = World
@@ -185,6 +186,7 @@ game eInput = do
         <*> playerCoins
         <*> playerDirection
         <*> playerPosition
+        <*> playerVelocity'
         <*> pointerD
       output = Output
         <$> consoleOpen
@@ -201,12 +203,23 @@ game eInput = do
   input <- holdDyn undefined eInput
   return $ (,) <$> input <*> output
  where
-  calculatePlayerVelocity :: V3 Float -> V3 Float -> V3 Float
-  calculatePlayerVelocity dest orig =
-    let delta = dest - orig
-    in if magnitude delta <= epsilon
-         then 0
-         else normalize delta ^* playerSpeed
+  playerVelocity :: Dynamic t DeltaT
+    -> Behavior t (V3 Float)
+    -> Dynamic t (V3 Float)
+    -> Dynamic t (V3 Float)
+    -> App t (Dynamic t (V3 Float))
+  playerVelocity deltaT velocity destination origin =
+    holdDyn 0
+      . attachWith (\v (t, d, o) -> calculatePlayerVelocity v t d o) velocity
+      . updated $ (,,) <$> deltaT <*> destination <*> origin
+   where
+    calculatePlayerVelocity v t dest orig =
+      let delta = dest - orig
+      in if magnitude delta <= epsilon
+           then 0
+           else normalize delta ^* speedMax
+
+    speedMax = 4.5 -- m/s
 
   setPlayerCamera :: V3 Float -> Camera
   setPlayerCamera (V3 x _ z) =

@@ -135,6 +135,7 @@ createDebugInfoOverlayer timeRef = do
         (cursorX, cursorY) = inputCursorPos
         V3 pointerX pointerY pointerZ = worldPointerPosition
         V3 playerX playerY playerZ = worldPlayerPosition
+        V3 playerVx playerVy playerVz = worldPlayerVelocity
     FpsStatistics{..} <- fpsStats
     renderLines [
         -- FPS counter
@@ -145,6 +146,7 @@ createDebugInfoOverlayer timeRef = do
           (round fpsHigh :: Int),
         -- Player position
         printf "Player: x% .5f y x% .5f z% .5f" playerX playerY playerZ,
+        printf "        x% .5f y x% .5f z% .5f m/s" playerVx playerVy playerVz,
         printf "Camera: x% .5f y% .5f z% .5f" camX camY camZ,
         printf "        pitch% .1f yaw% .1f" (180 * camPitch / pi)
           . (/ pi) . (* 180) $ camYaw,
