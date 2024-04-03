@@ -70,6 +70,14 @@ createRenderer win timeRef Entities{..} = do
           elementPosition = worldPointerPosition,
           elementRotation = Q.identity,
           elementShadow = False
+        },
+        -- Peasant
+        Element {
+          elementAnimation = Just ("Idle", 1.33, worldAnimationTime),
+          elementModel = peasantModel entitiesPeasant,
+          elementPosition = V3 5 0 0,
+          elementRotation = Q.identity,
+          elementShadow = True
         }
         -- Coins
       ] ++ fmap (mkCoin worldAnimationTime) worldCoins ++ [

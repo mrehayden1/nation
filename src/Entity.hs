@@ -4,6 +4,7 @@ module Entity (
   Coin(coinCollision, coinModel),
   Grass(grassModel),
   Player(playerCollision, playerModel),
+  Peasant(peasantCollision, peasantModel),
   Pointer(pointerModel),
 
   Collision,
@@ -23,6 +24,7 @@ import Render.Model.GLTF.Material as Mat
 data Entities = Entities {
   entitiesCoin :: Coin,
   entitiesGrass :: Grass,
+  entitiesPeasant :: Peasant,
   entitiesPlayer :: Player,
   entitiesPointer :: Pointer
 }
@@ -34,6 +36,11 @@ data Coin = Coin {
 
 newtype Grass = Grass {
   grassModel :: Model
+}
+
+data Peasant = Peasant {
+  peasantCollision :: Collision,
+  peasantModel :: Model
 }
 
 data Player = Player {
@@ -49,6 +56,7 @@ loadEntities :: IO Entities
 loadEntities = Entities
     <$> loadCoin
     <*> loadGrass
+    <*> loadPeasant
     <*> loadPlayer
     <*> (Pointer <$> loadModel "assets/models/emerald.glb")
 
@@ -58,6 +66,17 @@ loadCoin = do
   -- Circle around the model origin.
   let collision = CollisionCircle 0 0.62
   return . Coin collision $ model
+
+loadPeasant :: IO Peasant
+loadPeasant = do
+  model <- loadModel "assets/models/peasant.glb"
+  let collision = CollisionPolygon [
+          V2 (-6) (-3),
+          V2   6  (-3),
+          V2   6    3 ,
+          V2 (-6)   3
+        ]
+  return . Peasant collision $ model
 
 loadPlayer :: IO Player
 loadPlayer = do
