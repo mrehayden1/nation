@@ -227,9 +227,9 @@ game eInput = do
         h  = 16
     in Camera {
          camPitch = negate th,
-         -- always look at the player position
+         -- camera always looks at the player position...
          camPos = V3 x h (z + h / tan th),
-         -- towards -z
+         -- ...and towards -z
          camYaw = pi / 2
        }
 

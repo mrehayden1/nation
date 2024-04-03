@@ -36,7 +36,6 @@ import Linear
 import qualified Text.GLTF.Loader as G
 
 data Model = Model {
-  modelName :: String,
   modelNodes :: Vector Node,
   modelScene :: Vector Int, -- node indices
   modelSkins :: Vector G.Skin,

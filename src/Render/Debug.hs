@@ -71,7 +71,7 @@ createDebugGizmoOverlayer = do
       ("debug/gizmo", GL.VertexShader)
     ]
   -- Load gizmo
-  model <- fromGlbFile "gizmo" "assets/models/reference_frame.glb"
+  model <- fromGlbFile "assets/models/reference_frame.glb"
   return $ \camera -> local (set _envPipeline pipeline) $ do
     liftIO . bindPipeline $ pipeline
     let cameraViewM = Cam.toViewMatrix camera :: M44 GL.GLfloat

@@ -42,7 +42,7 @@ vsyncEnabled = False
 
 createRenderEnv :: IO Render.Env
 createRenderEnv = do
-  jointModel <- fromGlbFile "joint" "assets/models/joint.glb"
+  jointModel <- fromGlbFile "assets/models/joint.glb"
   return $ Render.Env {
     envJointModel = jointModel,
     envPipeline = undefined, --- FIXME yucky

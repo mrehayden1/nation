@@ -60,7 +60,7 @@ createRenderer win timeRef Entities{..} = do
           elementAnimation = Nothing,
           elementModel = grassModel entitiesGrass,
           elementPosition = 0,
-          elementRotation = identityQuaternion,
+          elementRotation = Q.identity,
           elementShadow = True
         },
         -- Pointer
@@ -68,9 +68,10 @@ createRenderer win timeRef Entities{..} = do
           elementAnimation = Just ("spin", 5, worldAnimationTime),
           elementModel = pointerModel entitiesPointer,
           elementPosition = worldPointerPosition,
-          elementRotation = identityQuaternion,
+          elementRotation = Q.identity,
           elementShadow = False
         }
+        -- Coins
       ] ++ fmap (mkCoin worldAnimationTime) worldCoins ++ [
         -- Horse
         Element {
@@ -95,6 +96,6 @@ createRenderer win timeRef Entities{..} = do
         elementAnimation = Just ("Spin", 2.08, t),
         elementModel = coinModel entitiesCoin,
         elementPosition = V3 x y z,
-        elementRotation = identityQuaternion,
+        elementRotation = Q.identity,
         elementShadow = True
       }

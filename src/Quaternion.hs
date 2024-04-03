@@ -1,10 +1,10 @@
 module Quaternion (
   fromVectors,
 
-  identityQuaternion
+  identity
 ) where
 
-import Linear
+import Linear hiding (identity)
 
 fromVectors :: forall a. (Epsilon a, Floating a)
   => V3 a
@@ -18,5 +18,5 @@ fromVectors a b =
   mag2 :: V3 a -> a
   mag2 = sum . fmap (**2)
 
-identityQuaternion :: Quaternion Float
-identityQuaternion = Quaternion 1 0
+identity :: Quaternion Float
+identity = Quaternion 1 0

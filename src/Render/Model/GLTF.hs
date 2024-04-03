@@ -19,8 +19,8 @@ import qualified Render.Model.GLTF.Material as M
 import Render.Model.GLTF.Texture as GT
 import Render.Model.Model
 
-fromGlbFile :: String -> FilePath -> IO Model
-fromGlbFile name pathname = do
+fromGlbFile :: FilePath -> IO Model
+fromGlbFile pathname = do
   eGlb <- G.fromBinaryFile pathname
   gltf <- case eGlb of
     Left  _ -> fail "fromGlbFile: Failed to read GLB."
@@ -38,7 +38,7 @@ fromGlbFile name pathname = do
       -- FIXME Because we don't have a top level `scene` property yet, default
       -- to the first scene in the list.
       scene = G.sceneNodes . V.head $ gltfScenes
-  return $ Model name nodes scene gltfSkins 0
+  return $ Model nodes scene gltfSkins 0
  where
   getMaterialBaseColorTextureId = pure . G.textureId <=< G.pbrBaseColorTexture
     <=< G.materialPbrMetallicRoughness
