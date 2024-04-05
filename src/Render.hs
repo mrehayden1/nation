@@ -70,17 +70,11 @@ createRenderer win timeRef Entities{..} = do
           elementPosition = worldPointerPosition,
           elementRotation = Q.identity,
           elementShadow = False
-        },
-        -- Peasant
-        Element {
-          elementAnimation = Just ("Idle", 1.33, worldAnimationTime),
-          elementModel = peasantEModel entitiesPeasant,
-          elementPosition = V3 5 0 0,
-          elementRotation = Q.identity,
-          elementShadow = True
         }
+        -- Peasant
+      ] ++ fmap (mkPeasant worldAnimationTime) worldPeasants
         -- Coins
-      ] ++ fmap (mkCoin worldAnimationTime) worldCoins ++ [
+        ++ fmap (mkCoin worldAnimationTime) worldCoins ++ [
         -- Horse
         Element {
           elementAnimation = if magnitude2 worldPlayerVelocity > 0
@@ -99,11 +93,22 @@ createRenderer win timeRef Entities{..} = do
       }
     }
    where
-    mkCoin t (V3 x y z) =
+    mkCoin t (Coin _ p) =
       Element {
         elementAnimation = Just ("Spin", 2.08, t),
         elementModel = coinEModel entitiesCoin,
-        elementPosition = V3 x y z,
+        elementPosition = p,
         elementRotation = Q.identity,
         elementShadow = True
       }
+
+    mkPeasant t (Peasant d p v) =
+      Element {
+          elementAnimation = if magnitude v > 0
+            then Just ("Walk", 0.66, t)
+            else Just ("Idle Long", 4, t),
+          elementModel = peasantEModel entitiesPeasant,
+          elementPosition = p,
+          elementRotation = Q.fromVectors (V3 1 0 0) d,
+          elementShadow = True
+        }

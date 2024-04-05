@@ -28,6 +28,9 @@ executable nation
       App
       App.Coins
       App.Env
+      App.Input
+      App.Output
+      App.Peasant
       Camera
       Cursor
       Entity

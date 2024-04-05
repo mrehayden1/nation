@@ -8,6 +8,7 @@ import Linear
 import Reflex
 
 import App.Env
+import App.Output
 import Entity
 import Entity.Collision
 import Matrix
@@ -15,18 +16,13 @@ import Matrix
 coinPlayerCollectCooldown :: Float
 coinPlayerCollectCooldown = 2
 
-data Coin = Coin {
-  coinTimeDropped :: Float,
-  coinPosition :: V3 Float
-} deriving (Show)
-
+-- TODO Should we move playerCoins to the player code?
 coins :: forall t. Event t ()
   -> Dynamic t (V3 Float)
   -> Dynamic t (V3 Float)
-  -> App t (Dynamic t [V3 Float], Dynamic t Int)
+  -> App t (Dynamic t [Coin], Dynamic t Int)
 coins rClickE playerPosition playerDirection = do
   Entities{..} <- asks envEntities
-  deltaT <- asks (fmap inputDeltaT . envInputE)
   time <- asks envTime
   rec
     let playerCollision = liftA2 (makePlayerCollision entitiesPlayer)
@@ -41,18 +37,17 @@ coins rClickE playerPosition playerDirection = do
             . ffilter ((> 0) . fst3)
             . tag (current $ (,,) <$> playerCoins <*> playerPosition <*> time)
             $ rClickE
-    (looseCoins :: Dynamic t [Coin]) <- foldDyn (flip (foldr ($))) initialCoins
-      . mergeList $ [
+    (looseCoins :: Dynamic t [Coin]) <- foldDyn ($) initialCoins
+      . mergeWith (.) $ [
           fmap removeIxs coinsCollectedE,
-          fmap (uncurry addCoin) coinsDroppedE,
-          fmap (const id) deltaT
+          fmap (uncurry addCoin) coinsDroppedE
         ]
-    playerCoins <- foldDyn (flip (foldr ($))) 0 . mergeList $ [
+    playerCoins <- foldDyn ($) 0 . mergeWith (.) $ [
         (+) . length <$> coinsCollectedE,
         subtract 1   <$  coinsDroppedE
       ]
   return (
-      fmap (fmap coinPosition) looseCoins,
+      looseCoins,
       playerCoins
     )
  where
@@ -69,15 +64,15 @@ coins rClickE playerPosition playerDirection = do
 
   addCoin = ((:) .) . Coin
 
-  makePlayerCollision player pos dir =
-    let playerTransform = translate2D (V2 px pz) !*! rotate2D rot
+  makePlayerCollision playerE pos dir =
+    let transform = translate2D (V2 px pz) !*! rotate2D rot
         (V3 px _ pz) = pos
         (V3 dx _ dz) = dir
         rot = atan (dz/dx)
-    in transformCollision playerTransform . playerECollision $ player
+    in transformCollision transform . playerECoinPickupCollision $ playerE
 
   findCollectedCoinsI :: CoinE -> [Coin] -> Float -> Collision -> [Int]
-  findCollectedCoinsI coinEntity cs time playerCollision =
+  findCollectedCoinsI coinEntity cs time collision =
     fmap fst . filter (shouldCollect . snd) . zip [0..] $ cs
    where
     shouldCollect = liftA2
@@ -88,5 +83,5 @@ coins rClickE playerPosition playerDirection = do
     coinCollided Coin{..} =
       let V3 x _ z = coinPosition
           coinCollision' = coinECollision coinEntity
-      in collided playerCollision . flip transformCollision coinCollision'
+      in collided collision . flip transformCollision coinCollision'
           . translate2D $ V2 x z

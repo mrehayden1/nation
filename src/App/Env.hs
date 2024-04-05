@@ -3,16 +3,14 @@ module App.Env (
 
   App,
   Env(..),
-  Input(..)
 ) where
 
 import Control.Monad.Reader
 import Control.Monad.Fix
 import Entity
-import Graphics.UI.GLFW
 import Reflex
 
-import Cursor
+import App.Input
 
 type App t a = forall m. (Adjustable t m, MonadFix m, MonadHold t m,
   MonadReader (Env t) m) => m a
@@ -24,11 +22,3 @@ data Env t = Env {
   envWindowHeight :: Int,
   envWindowWidth :: Int
 }
-
-data Input = Input {
-  inputCursorPos :: CursorPosition,
-  inputMouseButtons :: [(MouseButton, MouseButtonState, ModifierKeys)],
-  inputKeys :: [(Key, KeyState, ModifierKeys)],
-  inputTime :: Float,
-  inputDeltaT :: Float
-} deriving (Show)

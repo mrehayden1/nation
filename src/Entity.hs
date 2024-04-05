@@ -3,8 +3,16 @@ module Entity (
 
   CoinE(coinECollision, coinEModel),
   GrassE(grassEModel),
-  PlayerE(playerECollision, playerEModel),
-  PeasantE(peasantECollision, peasantEModel),
+  PlayerE(
+    playerECoinPickupCollision,
+    playerECollision,
+    playerEModel
+  ),
+  PeasantE(
+    peasantECollision,
+    peasantECoinVision,
+    peasantEModel
+  ),
   PointerE(pointerEModel),
 
   Collision,
@@ -39,11 +47,13 @@ newtype GrassE = GrassE {
 }
 
 data PeasantE = PeasantE {
+  peasantECoinVision :: Collision,
   peasantECollision :: Collision,
   peasantEModel :: Model
 }
 
 data PlayerE = PlayerE {
+  playerECoinPickupCollision :: Collision,
   playerECollision :: Collision,
   playerEModel :: Model
 }
@@ -71,12 +81,13 @@ loadPeasant :: IO PeasantE
 loadPeasant = do
   model <- loadModel "assets/models/peasant.glb"
   let collision = CollisionPolygon [
-          V2 (-6) (-3),
-          V2   6  (-3),
-          V2   6    3 ,
-          V2 (-6)   3
+          V2 (-0.6) (-0.3),
+          V2   0.6  (-0.3),
+          V2   0.6    0.3 ,
+          V2 (-0.6)   0.3
         ]
-  return . PeasantE collision $ model
+      coinVision = CollisionCircle 0 3
+  return . PeasantE coinVision collision $ model
 
 loadPlayer :: IO PlayerE
 loadPlayer = do
@@ -87,7 +98,8 @@ loadPlayer = do
           V2   1.61   0.33 ,
           V2   1.61 (-0.33)
         ]
-  return . PlayerE collision $ model
+      coinPickupCollision = CollisionCircle 0 1
+  return . PlayerE coinPickupCollision collision $ model
 
 loadGrass :: IO GrassE
 loadGrass = do

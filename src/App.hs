@@ -1,14 +1,11 @@
 module App (
+  module App.Input,
+  module App.Output,
+
   Env(..),
   MsaaSubsamples(..),
 
   Frame,
-
-  Input(..),
-
-  Output(..),
-  World(..),
-  Daylight(..),
 
   game
 ) where
@@ -25,6 +22,9 @@ import Reflex.Network
 
 import App.Coins
 import App.Env
+import App.Input
+import App.Output
+import App.Peasant
 import Camera
 import qualified Camera as Cam
 import Cursor
@@ -56,36 +56,6 @@ keyConsoleToggle = GLFW.Key'GraveAccent
 
 keyDebugCameraToggle :: GLFW.Key
 keyDebugCameraToggle = GLFW.Key'Backspace
-
-data Output = Output {
-  outputConsoleOpen :: Bool,
-  outputConsoleText :: String,
-  outputDebugKeys :: [(GLFW.Key, GLFW.ModifierKeys)],
-  outputDebugMouseButtons :: [GLFW.MouseButton],
-  outputDebugQuadOverlay :: Bool,
-  outputDebugInfoOverlay :: Bool,
-  outputShouldExit :: Bool,
-  outputWorld :: World
-}
-
-data Daylight = Daylight {
-  daylightAmbientIntensity :: Float,
-  -- Pointing at the sun
-  daylightPitch :: Float,
-  daylightYaw :: Float
-}
-
-data World = World {
-  worldAnimationTime :: Float,
-  worldCamera :: Camera,
-  worldCoins :: [V3 Float],
-  worldDaylight :: Daylight,
-  worldPlayerCoins :: Int,
-  worldPlayerDirection :: V3 Float,
-  worldPlayerPosition :: V3 Float,
-  worldPlayerVelocity :: V3 Float,
-  worldPointerPosition :: V3 Float
-}
 
 playerStartPosition :: V3 Float
 playerStartPosition = V3 0 0 0
@@ -156,12 +126,15 @@ game = do
   let ambientLight = fmap ((* 1) . max 0 . sin) sunPitch
   -- Coins
   (looseCoins, playerCoins) <- coins rClickE playerPosition playerVelocity'
+  -- Peasants
+  peasants' <- peasants looseCoins
   -- Output
   let worldState = World
         <$> animationT
         <*> camera
         <*> looseCoins
         <*> (Daylight <$> ambientLight <*> sunPitch <*> pure (pi / 8))
+        <*> peasants'
         <*> playerCoins
         <*> playerDirection
         <*> playerPosition
