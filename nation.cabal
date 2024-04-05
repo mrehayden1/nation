@@ -26,6 +26,8 @@ executable nation
   main-is: Main.hs
   other-modules:
       App
+      App.Coins
+      App.Env
       Camera
       Cursor
       Entity

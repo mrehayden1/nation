@@ -64,59 +64,64 @@ main = do
     renderFrame <- createRenderer win timeRef entities
     renderEnv <- createRenderEnv
     -- Enter game loop
-    let appEnv = App.Env {
-      envEntities = entities,
-      envWindowHeight = windowHeight,
-      envWindowWidth = windowWidth
-    }
     runHeadlessApp $ do
-      time <- liftIO getPOSIXTime
+      startTime <- liftIO getPOSIXTime
       -- Write the start time to the time ref assuming that the post build
       -- event will happen immediately afterwards
-      liftIO $ writeIORef timeRef time
+      liftIO $ writeIORef timeRef startTime
       WindowReflexes{..} <- windowReflexes win
       -- Use the post build to create the first tick.
       ePostBuild <- getPostBuild
-      (eTick, tickTrigger) <- newTriggerEvent
+      (tickE, tickTrigger) <- newTriggerEvent
       -- Collect up the pressed keys during the current tick resetting them
       -- when the next tick comes
       let keys' = fmap (fmap reverse) . foldDyn (:) []
                     . fmap (\(k, _, s, m) -> (k, s, m))
       keysTick <- fmap join . networkHold (return $ pure [])
-                    $ keys' key <$ eTick
+                    $ keys' key <$ tickE
       let buttons = foldDyn (:) [] . fmap (\(b, s, m) -> (b, s, m))
                       $ mouseButton
       buttonsTick <- fmap join . networkHold (return $ pure [])
-                       $ buttons <$ eTick
-      let eInput =
+                       $ buttons <$ tickE
+      let inputE =
             attachPromptlyDynWith uncurry
               (Input <$> cursorPos <*> buttonsTick <*> keysTick)
-              . leftmost $ [(time, 0) <$ ePostBuild, eTick]
-      eFrame <- fmap updated . flip runReaderT appEnv . game $ eInput
-      let eShouldExit = void . ffilter id . fmap (outputShouldExit . snd)
-                          $ eFrame
-          eShutdown = leftmost [eShouldExit, windowClose]
+              . leftmost $ [(0, 0) <$ ePostBuild, tickE]
+      time <- holdDyn 0 . fmap inputTime $ inputE
+      let appEnv = App.Env {
+            envEntities = entities,
+            envInputE = inputE,
+            envTime = time,
+            envWindowHeight = windowHeight,
+            envWindowWidth = windowWidth
+          }
+      frameE <- fmap updated . flip runReaderT appEnv $ game
+      let shouldExitE = void . ffilter id . fmap (outputShouldExit . snd)
+                          $ frameE
+          shutdownE = leftmost [shouldExitE, windowClose]
       performEvent_
-        . fmap (progressFrame timeRef
+        . fmap (progressFrame startTime timeRef
                               (liftIO . tickTrigger)
                               (liftIO . flip runRender renderEnv . renderFrame))
-        $ eFrame
-      return eShutdown
+        $ frameE
+      return shutdownE
  where
   progressFrame :: MonadIO m
-    => IORef POSIXTime
-    -> ((Time, DeltaT) -> m ())
+    => POSIXTime
+    -> IORef POSIXTime
+    -- Current time + deltaT
+    -> ((Float, Float) -> m ())
     -> (Frame -> m ())
     -> Frame
     -> m ()
-  progressFrame timeRef tickTrigger render frame = do
+  progressFrame startTime timeRef tickTrigger render frame = do
     render frame
     time' <- liftIO getPOSIXTime
     time <- liftIO . readIORef $ timeRef
     let delta = time' - time
     liftIO . writeIORef timeRef $ time'
     -- Progress the simulation one tick after we're finished rendering.
-    tickTrigger (time, delta)
+    tickTrigger (realToFrac (time' - startTime), realToFrac delta)
     -- Collect events to process in the next tick.
     liftIO GLFW.pollEvents
 

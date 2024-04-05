@@ -5,8 +5,6 @@ module App (
   Frame,
 
   Input(..),
-  Time,
-  DeltaT,
 
   Output(..),
   World(..),
@@ -16,47 +14,33 @@ module App (
 ) where
 
 import Control.Monad
-import Control.Monad.Fix
-import Control.Monad.Reader
 import Data.Fixed
 import Data.Functor
-import Data.List (delete, insert, partition)
-import Data.Time.Clock
+import Data.List (delete, insert)
 import Data.Tuple.Extra
 import qualified Graphics.UI.GLFW as GLFW
 import Linear
 import Reflex
 import Reflex.Network
 
+import App.Coins
+import App.Env
 import Camera
 import qualified Camera as Cam
 import Cursor
-import Entity
-import Entity.Collision
 import Matrix
 import Vector
 
 data MsaaSubsamples = MsaaNone | Msaa2x | Msaa4x | Msaa8x | Msaa16x
   deriving (Eq, Enum)
 
-data Env = Env {
-  envEntities :: Entities,
-  envWindowHeight :: Int,
-  envWindowWidth :: Int
-}
-
 type Frame = (Input, Output)
-
-data Input = Input {
-  inputCursorPos :: CursorPosition,
-  inputMouseButtons :: [(GLFW.MouseButton, GLFW.MouseButtonState, GLFW.ModifierKeys)],
-  inputKeys :: [(GLFW.Key, GLFW.KeyState, GLFW.ModifierKeys)],
-  inputTime :: Time,
-  inputDeltaT :: DeltaT
-} deriving (Show)
 
 buttonMousePrimary :: GLFW.MouseButton
 buttonMousePrimary = GLFW.MouseButton'1
+
+buttonMouseSecondary :: GLFW.MouseButton
+buttonMouseSecondary = GLFW.MouseButton'2
 
 keyExit :: GLFW.Key
 keyExit = GLFW.Key'Escape
@@ -72,9 +56,6 @@ keyConsoleToggle = GLFW.Key'GraveAccent
 
 keyDebugCameraToggle :: GLFW.Key
 keyDebugCameraToggle = GLFW.Key'Backspace
-
-type Time = NominalDiffTime
-type DeltaT = NominalDiffTime
 
 data Output = Output {
   outputConsoleOpen :: Bool,
@@ -118,20 +99,19 @@ epsilon = 0.01
 debugCameraSpeed :: Float
 debugCameraSpeed = 6
 
-type App t a = forall m. (Adjustable t m, MonadFix m, MonadHold t m,
-  MonadReader Env m) => m a
-
-game :: forall t. Event t Input -> App t (Dynamic t Frame)
-game eInput = do
-  deltaT <- holdDyn 0 . fmap inputDeltaT $ eInput
-  animationT <- foldDyn ((+) . realToFrac) 0 . fmap inputDeltaT $ eInput
+game :: forall t. App t (Dynamic t Frame)
+game = do
+  inputE <- asks envInputE
+  deltaT <- holdDyn 0 . fmap inputDeltaT $ inputE
+  animationT <- foldDyn (+) 0 . fmap inputDeltaT $ inputE
   -- Keys
-  (keyPresses, heldKeys) <- keys eInput
+  (keyPresses, heldKeys) <- keys inputE
   -- Mouse buttons
-  (buttonPresses, heldButtons) <- buttons eInput
-  let clicks = ffilter (elem buttonMousePrimary) buttonPresses
+  (buttonPresses, heldButtons) <- buttons inputE
+  let lClickE = void . ffilter (elem buttonMousePrimary) $ buttonPresses
+      rClickE = void . ffilter (elem buttonMouseSecondary) $ buttonPresses
   -- Cursor window position
-  let cursorE = fmap inputCursorPos eInput
+  let cursorE = fmap inputCursorPos inputE
   cursor <- holdDyn (0, 0) cursorE
   -- Console
   consoleOpen <- toggle False . ffilter (elem keyConsoleToggle . fmap fst)
@@ -150,7 +130,7 @@ game eInput = do
   -- Player position
   rec
     moveSelection <- holdDyn (playerStartPosition + V3 epsilon 0 0)
-      . tag (current pointerD) $ clicks
+      . tag (current pointerD) $ lClickE
     playerVelocity' <- playerVelocity deltaT playerVelocityCurrent
                          moveSelection playerPosition
     let playerVelocityCurrent = current playerVelocity'
@@ -158,10 +138,10 @@ game eInput = do
       . updated $ playerVelocity'
     playerPosition <- foldDyn (+) playerStartPosition
       . attachWith
-          ((. realToFrac) . (^*))
+          (^*)
           (current playerVelocity')
       . fmap inputDeltaT
-      $ eInput
+      $ inputE
   -- Player camera
     let playerCamera = fmap setPlayerCamera pointerD
   -- Pointer
@@ -175,13 +155,12 @@ game eInput = do
     $ (,) <$> deltaT <*> heldKeys
   let ambientLight = fmap ((* 1) . max 0 . sin) sunPitch
   -- Coins
-  (coinsPositions, collectedCoinsE) <- coins playerPosition playerVelocity'
-  playerCoins <- foldDyn (+) 0 collectedCoinsE
+  (looseCoins, playerCoins) <- coins rClickE playerPosition playerVelocity'
   -- Output
   let worldState = World
         <$> animationT
         <*> camera
-        <*> coinsPositions
+        <*> looseCoins
         <*> (Daylight <$> ambientLight <*> sunPitch <*> pure (pi / 8))
         <*> playerCoins
         <*> playerDirection
@@ -200,10 +179,10 @@ game eInput = do
   -- Return the current input with the output.
   -- We can use undefined for the initial value because output is never
   -- produced until there has been an input.
-  input <- holdDyn undefined eInput
+  input <- holdDyn undefined inputE
   return $ (,) <$> input <*> output
  where
-  playerVelocity :: Dynamic t DeltaT
+  playerVelocity :: Dynamic t Float
     -> Behavior t (V3 Float)
     -> Dynamic t (V3 Float)
     -> Dynamic t (V3 Float)
@@ -233,16 +212,16 @@ game eInput = do
          camYaw = pi / 2
        }
 
-  updateSunPitch :: DeltaT -> [(GLFW.Key, GLFW.ModifierKeys)] -> Float -> Float
+  updateSunPitch :: Float -> [(GLFW.Key, GLFW.ModifierKeys)] -> Float -> Float
   updateSunPitch dt ks pitch = (+ pitch) . sum . fmap keyChange $ ks
    where
-    keyChange (GLFW.Key'Equal, _) = angularVelocity * realToFrac dt
-    keyChange (GLFW.Key'Minus, _) = negate angularVelocity * realToFrac dt
+    keyChange (GLFW.Key'Equal, _) = angularVelocity * dt
+    keyChange (GLFW.Key'Minus, _) = negate angularVelocity * dt
     keyChange _                   = 0
     -- Radians per second
     angularVelocity = 1
 
-  debugCamera :: Dynamic t DeltaT
+  debugCamera :: Dynamic t Float
     -> Dynamic t Camera
     -> Dynamic t Bool
     -> Dynamic t [(GLFW.Key, GLFW.ModifierKeys)]
@@ -266,13 +245,13 @@ game eInput = do
        $ (,,) <$> delta <*> fmap (fmap fst) heldKeys <*> cursor
       return $ fmap snd s
 
-    updateDebugCamera :: DeltaT
+    updateDebugCamera :: Float
       -> [GLFW.Key]
       -> CursorPosition
       -> (CursorPosition, Camera)
       -> (CursorPosition, Camera)
     updateDebugCamera deltaT ks (x', y') ((x, y), camera@Camera{..}) =
-      let velocity = pure debugCameraSpeed * realToFrac deltaT
+      let velocity = pure debugCameraSpeed * pure deltaT
                        * (sum . map keyVelocity $ ks)
           position = camPos + velocity
           -- Delta pitch and yaw are the negation of the change in cursor
@@ -298,44 +277,6 @@ game eInput = do
       keyVelocity GLFW.Key'S = negate . Cam.direction $ camera
       keyVelocity GLFW.Key'D = Cam.right camera
       keyVelocity _          = V3 0 0 0
-
-coins :: Dynamic t (V3 Float)
-  -> Dynamic t (V3 Float)
-  -> App t (Dynamic t [V3 Float], Event t Int)
-coins playerPosition playerDirection = do
-  Entities{..} <- asks envEntities
-  coinPositionsAndCoinsCollected <-
-    foldDyn (uncurry . collectCoins entitiesPlayer $ entitiesCoin)
-            (initialCoins, 0)
-      . updated . liftA2 (,) playerPosition $ playerDirection
-  let live = fmap fst coinPositionsAndCoinsCollected
-      collected = updated . fmap snd $ coinPositionsAndCoinsCollected
-  return (live, collected)
- where
-  initialCoins = [V3 5 0 5, V3 (-5) 0 5, V3 (-5) 0 (-5), V3 5 0 (-5)]
-
-  collectCoins :: Player
-    -> Coin
-    -> V3 Float
-    -> V3 Float
-    -> ([V3 Float], Int)
-    -> ([V3 Float], Int)
-  collectCoins playerEntity coinEntity pos dir (cs, _) =
-    let playerCollision' = transformCollision playerTransform
-          . playerCollision $ playerEntity
-        (V3 px _ pz) = pos
-        (V3 dx _ dz) = dir
-        rot = atan (dz/dx)
-        playerTransform = translate2D (V2 px pz) !*! rotate2D rot
-        (cs', collected) =
-          partition (not . coinCollided playerCollision') cs
-    in (cs', length collected)
-   where
-    coinCollided :: Collision -> V3 Float -> Bool
-    coinCollided playerCollision' (V3 x _ z) =
-      let coinCollision' = coinCollision coinEntity
-      in collided playerCollision' . flip transformCollision coinCollision'
-          . translate2D $ V2 x z
 
 console :: Dynamic t Bool
   -> Event t [(GLFW.Key, GLFW.ModifierKeys)]

@@ -32,9 +32,9 @@ import Render.Util
 import Vector
 
 data FpsStatistics = FpsStatistics {
-  fpsMean :: DeltaT,
-  fpsLow :: DeltaT,
-  fpsHigh :: DeltaT
+  fpsMean :: Float,
+  fpsLow :: Float,
+  fpsHigh :: Float
 }
 
 -- TODO Refactor this and createDebugInfoOverlayer
@@ -122,7 +122,7 @@ createDebugInfoOverlayer timeRef = do
   fpsRef <- newIORef Nothing
   return . renderDebugText deltasRef fpsRef font $ renderText
  where
-  renderDebugText :: IORef [DeltaT]
+  renderDebugText :: IORef [Float]
     -> IORef (Maybe (POSIXTime, FpsStatistics))
     -> MsdfFont
     -> (Text -> Bool -> Render ())
@@ -140,7 +140,7 @@ createDebugInfoOverlayer timeRef = do
     renderLines [
         -- FPS counter
         printf
-          "Frame rate: %  dfps (mean) %  dfps (low) %  dfps (high)"
+          "Frame rate: mean %  dfps, low %  dfps, high %  dfps"
           (round fpsMean :: Int)
           (round fpsLow :: Int)
           (round fpsHigh :: Int),
@@ -156,9 +156,9 @@ createDebugInfoOverlayer timeRef = do
         -- Mouse buttons
         printf "Held buttons: %s" . List.intercalate ", "
           . fmap (drop 12 . show) $ outputDebugMouseButtons,
-        -- Cursor stuff (temp?)
-        printf "Cursor (screen) %.5f %.5f" cursorX cursorY,
-        printf "       (world)  %.5f %.5f %.5f" pointerX pointerY pointerZ
+        -- Cursor stuff
+        printf "Cursor screen %.5f %.5f" cursorX cursorY,
+        printf "       world  %.5f %.5f %.5f" pointerX pointerY pointerZ
       ]
    where
     renderLines :: [String] -> Render ()

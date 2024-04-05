@@ -1,11 +1,11 @@
 module Entity (
   Entities(..),
 
-  Coin(coinCollision, coinModel),
-  Grass(grassModel),
-  Player(playerCollision, playerModel),
-  Peasant(peasantCollision, peasantModel),
-  Pointer(pointerModel),
+  CoinE(coinECollision, coinEModel),
+  GrassE(grassEModel),
+  PlayerE(playerECollision, playerEModel),
+  PeasantE(peasantECollision, peasantEModel),
+  PointerE(pointerEModel),
 
   Collision,
   Model,
@@ -22,34 +22,34 @@ import Render.Model as Model
 import Render.Model.GLTF.Material as Mat
 
 data Entities = Entities {
-  entitiesCoin :: Coin,
-  entitiesGrass :: Grass,
-  entitiesPeasant :: Peasant,
-  entitiesPlayer :: Player,
-  entitiesPointer :: Pointer
+  entitiesCoin :: CoinE,
+  entitiesGrass :: GrassE,
+  entitiesPeasant :: PeasantE,
+  entitiesPlayer :: PlayerE,
+  entitiesPointer :: PointerE
 }
 
-data Coin = Coin {
-  coinCollision :: Collision,
-  coinModel :: Model
+data CoinE = CoinE {
+  coinECollision :: Collision,
+  coinEModel :: Model
 }
 
-newtype Grass = Grass {
-  grassModel :: Model
+newtype GrassE = GrassE {
+  grassEModel :: Model
 }
 
-data Peasant = Peasant {
-  peasantCollision :: Collision,
-  peasantModel :: Model
+data PeasantE = PeasantE {
+  peasantECollision :: Collision,
+  peasantEModel :: Model
 }
 
-data Player = Player {
-  playerCollision :: Collision,
-  playerModel :: Model
+data PlayerE = PlayerE {
+  playerECollision :: Collision,
+  playerEModel :: Model
 }
 
-newtype Pointer = Pointer {
-  pointerModel :: Model
+newtype PointerE = PointerE {
+  pointerEModel :: Model
 }
 
 loadEntities :: IO Entities
@@ -58,16 +58,16 @@ loadEntities = Entities
     <*> loadGrass
     <*> loadPeasant
     <*> loadPlayer
-    <*> (Pointer <$> loadModel "assets/models/emerald.glb")
+    <*> (PointerE <$> loadModel "assets/models/emerald.glb")
 
-loadCoin :: IO Coin
+loadCoin :: IO CoinE
 loadCoin = do
   model <- loadModel "assets/models/coin.glb"
   -- Circle around the model origin.
   let collision = CollisionCircle 0 0.62
-  return . Coin collision $ model
+  return . CoinE collision $ model
 
-loadPeasant :: IO Peasant
+loadPeasant :: IO PeasantE
 loadPeasant = do
   model <- loadModel "assets/models/peasant.glb"
   let collision = CollisionPolygon [
@@ -76,9 +76,9 @@ loadPeasant = do
           V2   6    3 ,
           V2 (-6)   3
         ]
-  return . Peasant collision $ model
+  return . PeasantE collision $ model
 
-loadPlayer :: IO Player
+loadPlayer :: IO PlayerE
 loadPlayer = do
   model <- loadModel "assets/models/horse.glb"
   let collision = CollisionPolygon [
@@ -87,9 +87,9 @@ loadPlayer = do
           V2   1.61   0.33 ,
           V2   1.61 (-0.33)
         ]
-  return . Player collision $ model
+  return . PlayerE collision $ model
 
-loadGrass :: IO Grass
+loadGrass :: IO GrassE
 loadGrass = do
   let pathname = "assets/models/grass-tile.glb"
   printFileName pathname
@@ -111,7 +111,7 @@ loadGrass = do
   let mesh = V.fromList [prim]
       node = Node mempty mempty False (Just mesh) (Quaternion 1 0) 1 Nothing 0
       model = Model (V.singleton node) (V.singleton 0) mempty 0
-  return . Grass $ model
+  return . GrassE $ model
  where
   textureScale = 4.5
 

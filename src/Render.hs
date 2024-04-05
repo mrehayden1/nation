@@ -58,7 +58,7 @@ createRenderer win timeRef Entities{..} = do
         -- Grass
         Element {
           elementAnimation = Nothing,
-          elementModel = grassModel entitiesGrass,
+          elementModel = grassEModel entitiesGrass,
           elementPosition = 0,
           elementRotation = Q.identity,
           elementShadow = True
@@ -66,7 +66,7 @@ createRenderer win timeRef Entities{..} = do
         -- Pointer
         Element {
           elementAnimation = Just ("spin", 5, worldAnimationTime),
-          elementModel = pointerModel entitiesPointer,
+          elementModel = pointerEModel entitiesPointer,
           elementPosition = worldPointerPosition,
           elementRotation = Q.identity,
           elementShadow = False
@@ -74,7 +74,7 @@ createRenderer win timeRef Entities{..} = do
         -- Peasant
         Element {
           elementAnimation = Just ("Idle", 1.33, worldAnimationTime),
-          elementModel = peasantModel entitiesPeasant,
+          elementModel = peasantEModel entitiesPeasant,
           elementPosition = V3 5 0 0,
           elementRotation = Q.identity,
           elementShadow = True
@@ -86,7 +86,7 @@ createRenderer win timeRef Entities{..} = do
           elementAnimation = if magnitude2 worldPlayerVelocity > 0
             then Just ("Gallop" , 0.67, worldAnimationTime)
             else Just ("Idle2", 6, worldAnimationTime),
-          elementModel = playerModel entitiesPlayer,
+          elementModel = playerEModel entitiesPlayer,
           elementPosition = worldPlayerPosition,
           elementRotation = Q.fromVectors (V3 1 0 0) worldPlayerDirection,
           elementShadow = True
@@ -102,7 +102,7 @@ createRenderer win timeRef Entities{..} = do
     mkCoin t (V3 x y z) =
       Element {
         elementAnimation = Just ("Spin", 2.08, t),
-        elementModel = coinModel entitiesCoin,
+        elementModel = coinEModel entitiesCoin,
         elementPosition = V3 x y z,
         elementRotation = Q.identity,
         elementShadow = True
