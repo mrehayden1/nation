@@ -78,8 +78,8 @@ createRenderer win timeRef Entities{..} = do
         -- Horse
         Element {
           elementAnimation = if magnitude2 worldPlayerVelocity > 0
-            then Just ("Gallop" , 0.67, worldAnimationTime)
-            else Just ("Idle2", 6, worldAnimationTime),
+            then Just ("Gallop", 0.67, worldAnimationTime)
+            else Just ("Idle2" , 6   , worldAnimationTime),
           elementModel = playerEModel entitiesPlayer,
           elementPosition = worldPlayerPosition,
           elementRotation = Q.fromVectors (V3 1 0 0) worldPlayerDirection,
@@ -104,11 +104,11 @@ createRenderer win timeRef Entities{..} = do
 
     mkPeasant t (Peasant d p v) =
       Element {
-          elementAnimation = if magnitude v > 0
-            then Just ("Walk", 0.66, t)
-            else Just ("Idle Long", 4, t),
-          elementModel = peasantEModel entitiesPeasant,
-          elementPosition = p,
-          elementRotation = Q.fromVectors (V3 1 0 0) d,
-          elementShadow = True
-        }
+        elementAnimation = if magnitude v > 0
+          then Just ("Walk"     , 0.66, t)
+          else Just ("Idle Long", 4   , t),
+        elementModel = peasantEModel entitiesPeasant,
+        elementPosition = p,
+        elementRotation = Q.fromVectors (V3 1 0 0) d,
+        elementShadow = True
+      }
