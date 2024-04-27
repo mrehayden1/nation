@@ -5,11 +5,11 @@ module App.Env (
   Env(..),
 ) where
 
-import Control.Monad.Reader
 import Control.Monad.Fix
-import Entity
+import Control.Monad.Reader
 import Reflex
 
+import App.Entity
 import App.Input
 
 type App t a = forall m. (Adjustable t m, MonadFix m, MonadHold t m,

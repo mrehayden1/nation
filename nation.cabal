@@ -22,50 +22,58 @@ source-repository head
   type: git
   location: https://github.com/mrehayden1/nation
 
-executable nation
-  main-is: Main.hs
-  other-modules:
+library
+  exposed-modules:
       App
-      App.Coins
+      App.Camera
+      App.Cursor
+      App.Entity
+      App.Entity.Collision
       App.Env
+      App.Game
+      App.Game.Coins
+      App.Game.Peasant
+      App.Geometry
+      App.Geometry.Clip
+      App.Geometry.Types
       App.Input
+      App.Map
+      App.Matrix
       App.Output
-      App.Peasant
-      Camera
-      Cursor
-      Entity
-      Entity.Collision
-      Matrix
-      Quaternion
-      Render
-      Render.Debug
-      Render.Env
-      Render.Model
-      Render.Model.GLTF
-      Render.Model.GLTF.Material
-      Render.Model.GLTF.Texture
-      Render.Model.Model
-      Render.Pipeline
-      Render.Scene
-      Render.Scene.Scene
-      Render.Scene.Shadow
-      Render.Shaders
-      Render.Text
-      Render.Text.Font.MSDF
-      Render.Texture
-      Render.UI
-      Render.Util
-      Vector
+      App.Quaternion
+      App.Render
+      App.Render.Debug
+      App.Render.Env
+      App.Render.Model
+      App.Render.Model.GLTF
+      App.Render.Model.GLTF.Material
+      App.Render.Model.GLTF.Texture
+      App.Render.Model.Model
+      App.Render.Pipeline
+      App.Render.Scene
+      App.Render.Scene.Scene
+      App.Render.Scene.Shadow
+      App.Render.Shaders
+      App.Render.Text
+      App.Render.Text.Font.MSDF
+      App.Render.Texture
+      App.Render.UI
+      App.Render.Util
+      App.Vector
+  other-modules:
       Paths_nation
   hs-source-dirs:
       src
   default-extensions:
       AllowAmbiguousTypes
+      CApiFFI
+      DataKinds
       DeriveGeneric
       FlexibleContexts
       GeneralizedNewtypeDeriving
       LambdaCase
       OverloadedStrings
+      PatternSynonyms
       RankNTypes
       RecordWildCards
       RecursiveDo
@@ -74,11 +82,17 @@ executable nation
       TupleSections
       TypeApplications
       TypeFamilies
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+      TypeOperators
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+  include-dirs:
+      includes
+  c-sources:
+      cbits/gpc.c
   build-depends:
       GLFW-b
     , JuicyPixels
     , JuicyPixels-extra
+    , MonadRandom
     , OpenGL
     , OpenGLRaw
     , StateVar
@@ -90,6 +104,9 @@ executable nation
     , extra
     , filepath
     , gltf-loader
+    , hgeometry
+    , hgeometry-combinatorial
+    , hsnoise
     , lens
     , linear
     , mtl
@@ -99,4 +116,69 @@ executable nation
     , text
     , time
     , vector
+  default-language: Haskell2010
+
+executable map-test
+  main-is: Main.hs
+  other-modules:
+      Paths_nation
+  hs-source-dirs:
+      src-exe/MapTest
+  default-extensions:
+      AllowAmbiguousTypes
+      CApiFFI
+      DataKinds
+      DeriveGeneric
+      FlexibleContexts
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      OverloadedStrings
+      PatternSynonyms
+      RankNTypes
+      RecordWildCards
+      RecursiveDo
+      ScopedTypeVariables
+      TemplateHaskell
+      TupleSections
+      TypeApplications
+      TypeFamilies
+      TypeOperators
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , gloss
+    , linear
+    , nation
+    , random
+  default-language: Haskell2010
+
+executable nation
+  main-is: Main.hs
+  other-modules:
+      Paths_nation
+  hs-source-dirs:
+      src-exe/Game
+  default-extensions:
+      AllowAmbiguousTypes
+      CApiFFI
+      DataKinds
+      DeriveGeneric
+      FlexibleContexts
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      OverloadedStrings
+      PatternSynonyms
+      RankNTypes
+      RecordWildCards
+      RecursiveDo
+      ScopedTypeVariables
+      TemplateHaskell
+      TupleSections
+      TypeApplications
+      TypeFamilies
+      TypeOperators
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , nation
   default-language: Haskell2010

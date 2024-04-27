@@ -8,9 +8,10 @@ module App.Output (
   Peasant(..)
 ) where
 
-import Camera
 import Graphics.UI.GLFW
 import Linear
+
+import App.Camera
 
 data Output = Output {
   outputConsoleOpen :: Bool,

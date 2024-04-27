@@ -17,7 +17,8 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-22.11
+#resolver: lts-22.11 # GHC 9.6
+resolver: lts-21.25 # GHC 9.4
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -43,12 +44,18 @@ extra-deps:
 - constraints-0.13.4
 #- gltf-loader-0.3.0.0
 - gltf-codec-0.1.0.4
+- hsnoise-0.0.3
 - patch-0.0.8.2
 - primitive-0.7.4.0
 - reflex-0.9.3.0
 - git: git@github.com:vagarenko/reflex-glfw-simple.git
   commit: 64bafffabaf83e0cd2045a8da5ecd8bdef401cee
+- url: https://github.com/noinia/hgeometry/archive/refs/tags/0.15.tar.gz
+  subdirs:
+  - hgeometry
+  - hgeometry-combinatorial
 - ../haskell-gltf-loader
+- ../vector-circular
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

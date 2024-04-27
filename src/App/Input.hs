@@ -2,8 +2,9 @@ module App.Input (
   Input(..)
 ) where
 
-import Cursor
 import Graphics.UI.GLFW
+
+import App.Cursor
 
 data Input = Input {
   inputCursorPos :: CursorPosition,
