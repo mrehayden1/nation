@@ -1,12 +1,12 @@
 module App.Map (
   module Control.Monad.Random,
 
-  Path,
   generateMapGeometry,
   generateMapGraph,
-  discRadius,
+  poiDiscRadius,
 
-  perlinPath
+  perlinPath,
+  perlinLoop
 ) where
 
 import Algorithms.Geometry.DelaunayTriangulation.DivideAndConquer
@@ -17,7 +17,7 @@ import Control.Monad.Random
 import Data.Bifunctor
 import Data.Ext
 import Data.Function
-import Data.List (minimumBy)
+import Data.List (foldl', minimumBy)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe
@@ -27,34 +27,58 @@ import qualified Geometry.Vector.VectorFamily as VF
 import Linear
 import Numeric.Noise.Perlin
 
+import App.Geometry
+
 data MapGrid = Center | North | NorthEast | East | SouthEast | South
                  | SouthWest | West | NorthWest
  deriving (Eq)
 
 type Graph = ([V2 Float], [(V2 Float, V2 Float)])
-type Room = [V2 Float]
-type Path = ([V2 Float], [V2 Float]) -- Route + path geometry
 
-type MapData = (Graph, [Room], [Path])
+type MapData = (Graph, [Polygon Float], [Polygon Float], Polygon Float, [V2 Float])
 
-discRadius :: Fractional a => a
-discRadius = 0.15
+-- The radius around of point of interest in which another can't exist
+poiDiscRadius :: Fractional a => a
+poiDiscRadius = 0.15
 
 generateMapGeometry :: Int -> MapData
 generateMapGeometry seed = flip evalRand (mkStdGen seed) $ do
   graph@(points, edges) <- generateMapGraph
   rooms <- mapM perlinLoop points
   paths <- mapM (uncurry perlinPath) edges
-  return (graph, rooms, paths)
+  let mesh = foldl' (\/) (App.Geometry.Polygon [] []) $ rooms ++ paths
+  trees <- generateTrees mesh
+  return (graph, rooms, paths, mesh, trees)
 
-perlinPath :: RandomGen g => V2 Float -> V2 Float -> Rand g Path
+generateTrees :: forall g a. (RandomGen g, Floating a, Ord a, Random a)
+  => Polygon a
+  -> Rand g [V2 a]
+generateTrees p =
+  let ps = [ V2 x y |
+             x <- fmap (subtract 0.5 . (/ n) . fromIntegral) [0..n :: Int],
+             y <- fmap (subtract 0.5 . (/ n) . fromIntegral) [0..n :: Int]
+           ]
+  in fmap (filter (not . inPolygon p)) . mapM addJitter $ ps
+ where
+  n :: forall n. Num n => n
+  n = 250
+
+  addJitter :: V2 a -> Rand g (V2 a)
+  addJitter a = do
+    t <- getRandomR (0, 2*pi)
+    r <- getRandomR (0, 0.0015)
+    let x = r * cos t
+        y = r * sin t
+    return $ a + V2 x y
+
+perlinPath :: RandomGen g => V2 Float -> V2 Float -> Rand g (Polygon Float)
 perlinPath p0 p1 = do
   route <- perlinRoute p0 p1
   let pairs = zip route . drop 1 $ route
-      norms = fmap (uncurry $ (((* 0.005) . vecNormal) .) . (-)) pairs
+      norms = fmap (uncurry $ (((* 0.01) . vecNormal) .) . (-)) pairs
       path' = (++) (zipWith (+) route norms)
                 . reverse . zipWith (-) route $ norms
-  return (route, path')
+  return . Polygon [path'] $ []
 
 -- Make a route between two points by sampling a perlin distribution on the
 -- circumfrence of a circle
@@ -83,16 +107,17 @@ perlinRoute p0 p1 = do
 
 -- Make a comlpete loop by sampling a perlin distribution on the circumfrence
 -- of a circle
-perlinLoop :: RandomGen g => V2 Float -> Rand g [V2 Float]
+perlinLoop :: RandomGen g => V2 Float -> Rand g (Polygon Float)
 perlinLoop c = do
   seed <- getRandom
-  let dist = perlin seed 1 0.5 0.5 -- seed, octaves, scale, persistence
-  return . fmap (point' dist) $ [0..(n - 1)]
+  let dist = perlin seed 2 0.5 0.5 -- seed, octaves, scale, persistence
+      room = fmap (point' dist) [0..(n - 1)]
+  return . Polygon [room] $ []
  where
   point' :: Perlin -> Int -> V2 Float
   point' p n' =
     let t = (/ realToFrac n) . ((2 * pi) *) . realToFrac $ n'
-    in (+ c) . (*^ circlePoint t) . (* 0.06) . (+ 0.5) . (/ 2)
+    in (+ c) . (*^ circlePoint t) . (* 0.08) . (+ 0.5) . (/ 2)
          . circularPerlin p $ t
 
   n :: Int
@@ -218,27 +243,14 @@ generatePointsOfInterest = do
     if length ps' >= n
       then return ps'
       else do
-        rs <- fmap (take 100000) getRandoms
+        rs <- fmap (take 10000) getRandoms
         let p' = head . filter valid . fmap (subtract 0.5) $ rs
         addPoints' (p' : ps') n xMin xMax yMin yMax ps
    where
     valid :: V2 a -> Bool
     valid = liftA2 (&&)
-              inBox
-              (not . flip any (ps <> ps') . flip inDisc discRadius)
-
-    inBox :: V2 a -> Bool
-    inBox = liftA2 (&&) (inBox' xMin xMax _x) (inBox' yMin yMax _y)
-     where
-      inBox' :: a
-        -> a
-        -> Lens' (V2 a) a
-        -> V2 a
-        -> Bool
-      inBox' mn mx f = liftA2 (&&) ((>= mn) . view f) ((<= mx) . view f)
-
-    inDisc :: V2 a -> a -> V2 a -> Bool
-    inDisc c r p = r >= distance p c
+              (inAxisAlignedBoundingBox (V2 xMin yMin) (V2 xMax yMax))
+              (not . flip any (ps <> ps') . flip inDisc poiDiscRadius)
 
 triangulate :: forall d. [V2 Float :+ d] -> [(V2 Float :+ d, V2 Float :+ d)]
 triangulate ps =

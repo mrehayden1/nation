@@ -1,5 +1,6 @@
 module App.Geometry.Types (
-  Polygon(..)
+  Polygon(..),
+  Face
 ) where
 
 import Linear
