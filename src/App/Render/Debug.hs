@@ -64,7 +64,7 @@ createConsoleOverlayer = do
     renderText t True
     deleteText t
 
-createDebugGizmoOverlayer :: IO (Camera -> Render ())
+createDebugGizmoOverlayer :: IO (Camera Float -> Render ())
 createDebugGizmoOverlayer = do
   pipeline <- compilePipeline [
       ("debug/gizmo", GL.FragmentShader),

@@ -17,45 +17,45 @@ module App.Matrix (
   toGlMatrix
 ) where
 
+import Control.Lens
 import Data.Foldable
 import qualified Graphics.Rendering.OpenGL as GL
 import Linear
 
+import App.Camera as Cam
 import App.Vector
 
--- Calculate the projection needed to build a depth map for directional light
-directionalLightProjection :: (Epsilon a, Floating a) => M44 a
-directionalLightProjection = ortho (-10) 10 (-10) 10 10 (-10)
-
-{-
-type DirectionalLight a = Floating a => V3 a
-
-directionalLightProjection :: (Epsilon a, Floating a) => Camera a -> DirectionalLight a -> M44 a
-directionalLightProjection camera lightDirection =
+directionalLightProjection :: (Epsilon a, Floating a, Ord a)
+  => Camera a
+  -> a
+  -> a
+  -> a
+  -> M44 a
+directionalLightProjection camera pitch yaw aspectRatio =
   let cameraView = Cam.toViewMatrix camera
-      cameraProjection = perspectiveProjection
-      cameraInverseViewProjection = L.inv44 $ cameraProjection !*! cameraView
-      frustum = fmap ((cameraInverseViewProjection !*) . L.point) ndcCube
-      lightMatrix = directionalLightViewMatrix (negate lightDirection)
-      lightSpaceFrustum = fmap (L.normalizePoint . (lightMatrix !*)) frustum
-      top = maximum . fmap (^. L._y) $ lightSpaceFrustum
-      bottom = minimum . fmap (^. L._y) $ lightSpaceFrustum
-      left = minimum . fmap (^. L._x) $ lightSpaceFrustum
-      right = maximum . fmap (^. L._x) $ lightSpaceFrustum
-      near = maximum . fmap (^. L._z) $ lightSpaceFrustum
-      far = minimum . fmap (^. L._z) $ lightSpaceFrustum
-  in L.ortho left right bottom top near far
+      cameraProjection = perspectiveProjection aspectRatio
+      cameraInverseViewProjection =
+        inv44 $ cameraProjection !*! cameraView
+      frustum' = fmap ((cameraInverseViewProjection !*) . point) ndcCube
+      lightMatrix = directionalLightViewMatrix pitch yaw
+      lightFrustum = fmap (normalizePoint . (lightMatrix !*)) frustum'
+      planeTop = maximum . fmap (^. _y) $ lightFrustum
+      planeBottom = minimum . fmap (^. _y) $ lightFrustum
+      planeLeft = minimum . fmap (^. _x) $ lightFrustum
+      planeRight = maximum . fmap (^. _x) $ lightFrustum
+      planeNear = maximum . fmap (^. _z) $ lightFrustum
+      planeFar = minimum . fmap (^. _z) $ lightFrustum
+  in ortho planeLeft planeRight planeBottom planeTop planeNear planeFar
  where
   ndcCube :: Floating a => [V3 a]
   ndcCube = fmap (\(x, y, z) -> V3 x y z) [
     ( 1,  1, -1), ( 1,  1,  1), (-1,  1,  1), (-1,  1, -1),
     ( 1, -1, -1), ( 1, -1,  1), (-1, -1,  1), (-1, -1, -1)]
--}
 
 -- The application global field of view angle (in degrees) and near and far
 -- clipping planes.
 far, fov, near :: Floating a => a
-far  = 1000
+far  = 25
 fov  = 35
 near = 0.1
 
@@ -70,8 +70,8 @@ directionalLightViewMatrix pitch yaw =
       -- the 'centre' to which the camera is looking
       centre = V3 0 0 0
       -- no camera roll so the camera is always on the x-z plane
-      right  = V3 (sin yaw) 0 (cos yaw)
-      up     = right `cross` dir -- camera's up
+      camRight  = V3 (sin yaw) 0 (cos yaw)
+      up     = camRight `cross` dir -- camera's up
   in lookAt (negate dir) centre up
 
 perspectiveProjection :: Floating a => a -> M44 a

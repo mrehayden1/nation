@@ -23,10 +23,10 @@ import App.Vector
 -- horizontal.
 
 -- TODO Investigate storing the camera state as a matrix.
-data Camera = Camera {
-  camPitch :: !Float,
-  camPos :: !(V3 Float),
-  camYaw :: !Float
+data Camera a = Camera {
+  camPitch :: !a,
+  camPos :: !(V3 a),
+  camYaw :: !a
 } deriving (Show)
 
 -- World up unit vector
@@ -34,13 +34,13 @@ worldUp :: Floating a => V3 a
 worldUp = V3 0 1 0
 
 -- Directional unit vector of the camera given pitch and yaw
-direction :: Camera -> V3 Float
+direction :: (Epsilon a, Floating a) => Camera a -> V3 a
 direction Camera{..} = eulerDirection camPitch camYaw
 
-right :: Camera -> V3 Float
+right :: Floating a => Camera a -> V3 a
 right Camera{..} = V3 (sin camYaw) 0 (cos camYaw)
 
-toViewMatrix :: Camera -> M44 Float
+toViewMatrix :: (Epsilon a, Floating a) => Camera a -> M44 a
 toViewMatrix cam@Camera{..} =
   let dir    = direction cam
       -- the 'centre' to which the camera is looking
@@ -49,5 +49,5 @@ toViewMatrix cam@Camera{..} =
       up     = right cam `cross` dir -- camera's up
   in lookAt camPos centre up
 
-toInverseViewMatrix :: Camera -> M44 Float
+toInverseViewMatrix :: (Epsilon a, Floating a) => Camera a -> M44 a
 toInverseViewMatrix = inv44 . toViewMatrix

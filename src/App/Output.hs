@@ -26,7 +26,7 @@ data Output = Output {
 
 data World = World {
   worldAnimationTime :: Float,
-  worldCamera :: Camera,
+  worldCamera :: Camera Float,
   worldCoins :: [Coin],
   worldDaylight :: Daylight,
   worldPeasants :: [Peasant],

@@ -174,7 +174,7 @@ app = do
 
     speedMax = 4.5 -- m/s
 
-  setPlayerCamera :: V3 Float -> Camera
+  setPlayerCamera :: V3 Float -> Camera Float
   setPlayerCamera (V3 x _ z) =
     let th = (3 * pi) / 8
         h  = 16
@@ -196,11 +196,11 @@ app = do
     angularVelocity = 1
 
   debugCamera :: Dynamic t Float
-    -> Dynamic t Camera
+    -> Dynamic t (Camera Float)
     -> Dynamic t Bool
     -> Dynamic t [(GLFW.Key, GLFW.ModifierKeys)]
     -> Dynamic t CursorPosition
-    -> App t (Dynamic t Camera)
+    -> App t (Dynamic t (Camera Float))
   debugCamera delta playerCamera debugCameraOn heldKeys cursor = do
     -- Reset the debug camera to the last player camera position every time
     -- its toggled on.
@@ -209,9 +209,9 @@ app = do
              . fmap (uncurry debugCameraPosition) $ camOn
     return . join $ pos
    where
-    debugCameraPosition :: Camera
+    debugCameraPosition :: Camera Float
       -> Bool
-      -> App t (Dynamic t Camera)
+      -> App t (Dynamic t (Camera Float))
     debugCameraPosition camStart camOn = do
       s <- foldDyn (uncurry3 updateDebugCamera) ((0, 0), camStart)
        . gate (pure camOn)
@@ -222,8 +222,8 @@ app = do
     updateDebugCamera :: Float
       -> [GLFW.Key]
       -> CursorPosition
-      -> (CursorPosition, Camera)
-      -> (CursorPosition, Camera)
+      -> (CursorPosition, Camera Float)
+      -> (CursorPosition, Camera Float)
     updateDebugCamera deltaT ks (x', y') ((x, y), camera@Camera{..}) =
       let velocity = pure debugCameraSpeed * pure deltaT
                        * (sum . map keyVelocity $ ks)
@@ -307,7 +307,7 @@ buttons eInput = do
   updateHeldButtons b GLFW.MouseButtonState'Released _ bs = delete b bs
 
 pointer :: Event t CursorPosition
-  -> Behavior t Camera
+  -> Behavior t (Camera Float)
   -> Behavior t (V3 Float)
   -> App t (Dynamic t (V3 Float))
 pointer cursorE camera playerPos = do
@@ -322,7 +322,7 @@ pointer cursorE camera playerPos = do
   -- middle of the player
   updatePointer :: Int
     -> Int
-    -> (Camera, V3 Float, V2 Float)
+    -> (Camera Float, V3 Float, V2 Float)
     -> V3 Float
     -> V3 Float
   updatePointer w h (cam, plPos@(V3 plX _ plZ), delta) curPos =
@@ -338,7 +338,7 @@ pointer cursorE camera playerPos = do
     r = 7
 
   -- The game pointer world coordinates on the plane y = 0
-  worldPosition :: Int -> Int -> Camera -> V2 Float -> V3 Float
+  worldPosition :: Int -> Int -> Camera Float -> V2 Float -> V3 Float
   worldPosition screenWidth screenHeight cam (V2 cursorX cursorY) =
     let w = realToFrac screenWidth
         h = realToFrac screenHeight
@@ -359,7 +359,7 @@ pointer cursorE camera playerPos = do
     toNdc :: Float -> Float -> Float
     toNdc d a = 2 * (a - (d / 2)) / d
 
-  screenPosition :: Int -> Int -> Camera -> V3 Float -> V2 Float
+  screenPosition :: Int -> Int -> Camera Float -> V3 Float -> V2 Float
   screenPosition screenWidth screenHeight cam pos =
     let width = realToFrac screenWidth
         height = realToFrac screenHeight

@@ -11,7 +11,7 @@ import App.Camera as Cam
 import App.Render.Model
 
 data Scene = Scene {
-  sceneCamera :: Camera,
+  sceneCamera :: Camera Float,
   sceneElements :: [Element],
   sceneDaylight :: Daylight
 }

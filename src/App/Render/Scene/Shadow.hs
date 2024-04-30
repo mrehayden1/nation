@@ -54,7 +54,8 @@ createShadowMapper = do
   -- Bind the depth map to the depth buffer FBO
   frameBuffer <- GL.genObjectName
   GL.bindFramebuffer GL.Framebuffer $= frameBuffer
-  GL.framebufferTexture2D GL.Framebuffer GL.DepthAttachment GL.Texture2D shadowMap shadowMapTextureImageLevel
+  GL.framebufferTexture2D GL.Framebuffer GL.DepthAttachment GL.Texture2D
+    shadowMap shadowMapTextureImageLevel
   GL.drawBuffer $= GL.NoBuffers -- Don't draw colour to our framebuffer
   GL.readBuffer $= GL.NoBuffers -- Don't read colour from our framebuffer
   GL.bindFramebuffer GL.Framebuffer $= GL.defaultFramebufferObject -- unbind
@@ -74,12 +75,15 @@ createShadowMapper = do
     liftIO $ bindPipeline pipeline
     GL.bindFramebuffer GL.Framebuffer $= frameBuffer
     -- Set projection matrix
-    projection <- liftIO $ toGlMatrix directionalLightProjection
+    aspectRatio <- asks viewportAspectRatio
+    projection <- liftIO $ toGlMatrix
+      . directionalLightProjection sceneCamera daylightPitch daylightYaw
+      $ aspectRatio
     pipelineUniform pipeline "projectionM"
       $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set view matrix
-    viewMatrix <- liftIO $ toGlMatrix . directionalLightViewMatrix daylightPitch
-      $ daylightYaw
+    viewMatrix <- liftIO . toGlMatrix
+      . directionalLightViewMatrix daylightPitch $ daylightYaw
     pipelineUniform pipeline "viewM" $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set viewport to shadow map size
     GL.viewport $= (
