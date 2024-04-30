@@ -26,6 +26,7 @@ import qualified Data.Vector.Storable as V
 import Foreign.Ptr
 import qualified Graphics.Rendering.OpenGL as GL
 import System.IO.Unsafe
+import Text.Printf
 
 -- Wether a loaded texture should be linearised
 type SRGB = Bool
@@ -84,19 +85,21 @@ fromDynamicImage srgb minF magF wrapS wrapT dynamicImage = do
     -- RGBA
     ImageRGBA8  i -> fromImage srgb minF magF wrapS wrapT i
     -- Missing support for the following pixel formats
-    --ImageY8 (Image Pixel8)
-    --ImageY16 (Image Pixel16)
-    --ImageY32 (Image Pixel32)
-    --ImageYF (Image PixelF)
-    --ImageYA8 (Image PixelYA8)
-    --ImageYA16 (Image PixelYA16)
-    --ImageRGB16 (Image PixelRGB16)
-    --ImageRGBF (Image PixelRGBF)
-    --ImageRGBA8 (Image PixelRGBA8)
-    --ImageRGBA16 (Image PixelRGBA16)
-    --ImageCMYK16 (Image PixelCMYK16)
-    _             -> error "fromDynamicImage: unsupported pixel format"
+    ImageY8 _ -> reportUnsupported "Pixel8"
+    ImageY16 _ -> reportUnsupported "Pixel16"
+    ImageY32 _ -> reportUnsupported "Pixel32"
+    ImageYF _ -> reportUnsupported "PixelF"
+    ImageYA8 _ -> reportUnsupported "PixelYA8"
+    ImageYA16 _ -> reportUnsupported "PixelYA16"
+    ImageRGB16 _ -> reportUnsupported "PixelRGB16"
+    ImageRGBF _ -> reportUnsupported "PixelRGBF"
+    ImageRGBA16 _ -> reportUnsupported "PixelRGB16"
+    ImageCMYK16 _ -> reportUnsupported "PixelCMYK16"
  where
+  reportUnsupported :: String -> a
+  reportUnsupported = error
+    . printf "fromDynamicImage: unsupported pixel format: %s"
+
   fromImage' = fromImage srgb minF magF wrapS wrapT
 
 class GlPixel a where
