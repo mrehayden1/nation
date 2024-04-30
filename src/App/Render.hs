@@ -34,7 +34,7 @@ createRenderer win timeRef Entities{..} = do
   overlayDebugQuad <- createDebugQuadOverlayer shadowMapTexture
   overlayDebugInfo <- createDebugInfoOverlayer timeRef
   overlayGizmo <- createDebugGizmoOverlayer
-  -- TODO Move this to it's own definition
+  -- TODO Move this lambda function to a definition
   -- React to changes in our Reflex application
   return $ \frame@(_, Output{..}) -> do
     let World{..} = outputWorld

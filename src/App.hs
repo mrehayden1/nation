@@ -110,8 +110,7 @@ start = do
   progressFrame :: MonadIO m
     => POSIXTime
     -> IORef POSIXTime
-    -- Current time + deltaT
-    -> ((Float, Float) -> m ())
+    -> ((Float, Float) -> m ()) -- Current time + deltaT
     -> (Frame -> m ())
     -> Frame
     -> m ()

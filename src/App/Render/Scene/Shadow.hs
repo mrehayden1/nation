@@ -27,8 +27,8 @@ shadowMapTextureImageLevel = 0
 baseColorTextureUnit :: Integral a => a
 baseColorTextureUnit = 0
 
--- Create a texture object and a callback that renders the shadow depth map
--- from the perspective of out light source to the texture.
+-- Create a texture object and a callback that renders the depth of the scene
+-- from the perspective of our light source to that texture.
 createShadowMapper ::IO (GL.TextureObject, Scene -> Render ())
 createShadowMapper = do
   shadowMap <- GL.genObjectName
@@ -44,8 +44,8 @@ createShadowMapper = do
     (GL.PixelData GL.DepthComponent GL.Float nullPtr)
   -- Disable texture filtering on our depth map
   GL.textureFilter GL.Texture2D $= ((GL.Nearest, Nothing), GL.Nearest)
-  -- Clamp to a max depth border so shadows don't appear when sampling
-  -- outside of the depth map
+  -- Clamp sampling to a border equal to max depth so that shadows don't appear
+  -- when sampling outside of the depth map
   GL.textureBorderColor GL.Texture2D $= GL.Color4 1 1 1 1
   GL.textureWrapMode GL.Texture2D GL.S $= (GL.Repeated, GL.ClampToBorder)
   GL.textureWrapMode GL.Texture2D GL.T $= (GL.Repeated, GL.ClampToBorder)
