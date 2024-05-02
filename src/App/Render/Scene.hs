@@ -65,8 +65,9 @@ createSceneRenderer shadowDepthMap = do
     pipelineUniform pipeline "lightProjectionM"
       $= (lightProjection :: GL.GLmatrix GL.GLfloat)
     -- Set light view matrix
-    lightView <- liftIO . toGlMatrix . directionalLightViewMatrix daylightPitch
-                   $ daylightYaw
+    lightView <- liftIO . toGlMatrix
+      . directionalLightViewMatrix sceneCamera daylightPitch daylightYaw
+      $ aspectRatio
     pipelineUniform pipeline "lightViewM"
       $= (lightView :: GL.GLmatrix GL.GLfloat)
     -- Set ambient intensity

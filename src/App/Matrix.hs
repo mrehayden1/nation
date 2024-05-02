@@ -19,6 +19,7 @@ module App.Matrix (
 
 import Control.Lens
 import Data.Foldable
+import Data.Tuple.Extra
 import qualified Graphics.Rendering.OpenGL as GL
 import Linear
 
@@ -32,25 +33,16 @@ directionalLightProjection :: (Epsilon a, Floating a, Ord a)
   -> a
   -> M44 a
 directionalLightProjection camera pitch yaw aspectRatio =
-  let cameraView = Cam.toViewMatrix camera
-      cameraProjection = perspectiveProjection aspectRatio
-      cameraInverseViewProjection =
-        inv44 $ cameraProjection !*! cameraView
-      frustum' = fmap ((cameraInverseViewProjection !*) . point) ndcCube
-      lightMatrix = directionalLightViewMatrix pitch yaw
-      lightFrustum = fmap (normalizePoint . (lightMatrix !*)) frustum'
-      planeTop = maximum . fmap (^. _y) $ lightFrustum
-      planeBottom = minimum . fmap (^. _y) $ lightFrustum
+  let lightMatrix = directionalLightViewMatrix camera pitch yaw aspectRatio
+      lightFrustum = fmap (normalizePoint . (lightMatrix !*) . point)
+        . cameraFrustum aspectRatio $ camera
       planeLeft = minimum . fmap (^. _x) $ lightFrustum
       planeRight = maximum . fmap (^. _x) $ lightFrustum
+      planeBottom = minimum . fmap (^. _y) $ lightFrustum
+      planeTop = maximum . fmap (^. _y) $ lightFrustum
       planeNear = maximum . fmap (^. _z) $ lightFrustum
       planeFar = minimum . fmap (^. _z) $ lightFrustum
   in ortho planeLeft planeRight planeBottom planeTop planeNear planeFar
- where
-  ndcCube :: Floating a => [V3 a]
-  ndcCube = fmap (\(x, y, z) -> V3 x y z) [
-    ( 1,  1, -1), ( 1,  1,  1), (-1,  1,  1), (-1,  1, -1),
-    ( 1, -1, -1), ( 1, -1,  1), (-1, -1,  1), (-1, -1, -1)]
 
 -- The application global field of view angle (in degrees) and near and far
 -- clipping planes.
@@ -61,18 +53,33 @@ near = 0.1
 
 -- Light direction points towards the (infinitely far away) light source
 directionalLightViewMatrix :: (Epsilon a, Floating a)
-  => a
+  => Camera a
+  -> a
+  -> a
   -> a
   -> M44 a
-directionalLightViewMatrix pitch yaw =
+directionalLightViewMatrix camera pitch yaw aspectRatio =
   -- TODO Make a function of the camera view
   let dir    = eulerDirection pitch yaw
       -- the 'centre' to which the camera is looking
-      centre = V3 0 0 0
-      -- no camera roll so the camera is always on the x-z plane
+      centre = (/ 8) . sum . cameraFrustum aspectRatio $ camera
+      -- no camera roll
       camRight  = V3 (sin yaw) 0 (cos yaw)
       up     = camRight `cross` dir -- camera's up
-  in lookAt (negate dir) centre up
+  in lookAt (centre - dir) centre up
+
+cameraFrustum :: (Epsilon a, Floating a) => a -> Camera a -> [V3 a]
+cameraFrustum aspectRatio camera =
+  let viewM = Cam.toViewMatrix camera
+      projectionM = perspectiveProjection aspectRatio
+      inverseViewProjection =
+        inv44 $ projectionM !*! viewM
+  in fmap (normalizePoint . (inverseViewProjection !*)) ndcCube
+ where
+  ndcCube :: Floating a => [V4 a]
+  ndcCube = fmap (point . uncurry3 V3) [
+    ( 1,  1, -1), ( 1,  1,  1), (-1,  1,  1), (-1,  1, -1),
+    ( 1, -1, -1), ( 1, -1,  1), (-1, -1,  1), (-1, -1, -1)]
 
 perspectiveProjection :: Floating a => a -> M44 a
 perspectiveProjection aspectRatio =

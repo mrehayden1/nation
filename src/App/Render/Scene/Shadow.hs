@@ -83,7 +83,8 @@ createShadowMapper = do
       $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set view matrix
     viewMatrix <- liftIO . toGlMatrix
-      . directionalLightViewMatrix daylightPitch $ daylightYaw
+      . directionalLightViewMatrix sceneCamera daylightPitch daylightYaw
+      $ aspectRatio
     pipelineUniform pipeline "viewM" $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
     -- Set viewport to shadow map size
     GL.viewport $= (
