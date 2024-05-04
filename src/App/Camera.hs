@@ -22,7 +22,6 @@ import App.Vector
 -- anticlockwise from the +x axis, and pitch is similarly measured from the
 -- horizontal.
 
--- TODO Investigate storing the camera state as a matrix.
 data Camera a = Camera {
   camPitch :: !a,
   camPos :: !(V3 a),

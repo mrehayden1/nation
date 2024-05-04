@@ -18,7 +18,7 @@ import App.Output
 coinPlayerCollectCooldown :: Float
 coinPlayerCollectCooldown = 2
 
--- TODO Should we move playerCoins to the player code?
+-- TODO Move playerCoins to the player code?
 coins :: forall t. Event t ()
   -> Dynamic t (V3 Float)
   -> Dynamic t (V3 Float)
