@@ -28,9 +28,8 @@ import App.Env
 import App.Game.Coins
 import App.Game.Peasant
 import App.Input
-import App.Matrix
+import App.Projection
 import App.Output
-import App.Vector
 
 data MsaaSubsamples = MsaaNone | Msaa2x | Msaa4x | Msaa8x | Msaa16x
   deriving (Eq, Enum)
@@ -62,7 +61,7 @@ playerStartPosition :: V3 Float
 playerStartPosition = V3 0 0 0
 
 playerStartDirection :: V3 Float
-playerStartDirection = V3 0 0 0
+playerStartDirection = V3 1 0 0
 
 epsilon :: Float
 epsilon = 0.01
@@ -126,7 +125,7 @@ app = do
     $ (,) <$> deltaT <*> heldKeys
   let ambientLight = fmap ((* 1) . max 0 . sin) sunPitch
   -- Coins
-  (looseCoins, playerCoins) <- coins rClickE playerPosition playerVelocity'
+  (looseCoins, playerCoins) <- coins rClickE playerPosition playerDirection
   -- Peasants
   peasants' <- peasants looseCoins
   -- Output
@@ -168,11 +167,11 @@ app = do
    where
     calculatePlayerVelocity v t dest orig =
       let delta = dest - orig
-      in if magnitude delta <= epsilon
+      in if norm delta <= epsilon
            then 0
            else normalize delta ^* speedMax
 
-    speedMax = 4.5 -- m/s
+    speedMax = 4.5
 
   setPlayerCamera :: V3 Float -> Camera Float
   setPlayerCamera (V3 x _ z) =

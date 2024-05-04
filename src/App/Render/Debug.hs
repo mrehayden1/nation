@@ -24,6 +24,7 @@ import App.Camera (Camera(..))
 import qualified App.Camera as Cam
 import App.Game hiding (Env)
 import App.Matrix
+import App.Projection
 import App.Render.Env
 import App.Render.Model
 import App.Render.Pipeline

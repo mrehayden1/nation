@@ -14,7 +14,7 @@ import Control.Lens
 import Control.Monad.Reader
 import Data.Function
 
-import App.Render.Model
+import App.Entity
 import App.Render.Pipeline
 
 newtype Render a = Render { unRenderer :: ReaderT Env IO a }
@@ -31,7 +31,8 @@ data Env = Env {
   -- Viewport height in pixels
   envViewportHeight :: Int,
   -- Viewport width in pixels
-  envViewportWidth :: Int
+  envViewportWidth :: Int,
+  renderEnvEntities :: Entities
 }
 
 _envPipeline :: Lens' Env Pipeline

@@ -29,6 +29,7 @@ library
       App.Cursor
       App.Entity
       App.Entity.Collision
+      App.Entity.Collision3D
       App.Env
       App.Game
       App.Game.Coins
@@ -40,6 +41,7 @@ library
       App.Map
       App.Matrix
       App.Output
+      App.Projection
       App.Quaternion
       App.Render
       App.Render.Debug

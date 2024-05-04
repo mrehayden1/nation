@@ -3,6 +3,10 @@ module App.Entity (
 
   CoinE(coinECollision, coinEModel),
   GrassE(grassEModel),
+  OakTreeE(
+    oakTreeEModel,
+    oakTreeECullingBounds
+  ),
   PlayerE(
     playerECoinPickupCollision,
     playerECollision,
@@ -26,19 +30,21 @@ import Linear
 import Text.Printf
 
 import App.Entity.Collision
+import App.Entity.Collision3D
 import App.Render.Model as Model
 import App.Render.Model.GLTF.Material as Mat
 
 data Entities = Entities {
   entitiesCoin :: CoinE,
   entitiesGrass :: GrassE,
+  entitiesOakTree :: OakTreeE,
   entitiesPeasant :: PeasantE,
   entitiesPlayer :: PlayerE,
   entitiesPointer :: PointerE
 }
 
 data CoinE = CoinE {
-  coinECollision :: Collision,
+  coinECollision :: Collision Float,
   coinEModel :: Model
 }
 
@@ -46,15 +52,20 @@ newtype GrassE = GrassE {
   grassEModel :: Model
 }
 
+data OakTreeE = OakTreeE {
+  oakTreeEModel :: Model,
+  oakTreeECullingBounds :: Collision3D Float
+}
+
 data PeasantE = PeasantE {
-  peasantECoinVision :: Collision,
-  peasantECollision :: Collision,
+  peasantECoinVision :: Collision Float,
+  peasantECollision :: Collision Float,
   peasantEModel :: Model
 }
 
 data PlayerE = PlayerE {
-  playerECoinPickupCollision :: Collision,
-  playerECollision :: Collision,
+  playerECoinPickupCollision :: Collision Float,
+  playerECollision :: Collision Float,
   playerEModel :: Model
 }
 
@@ -66,6 +77,7 @@ loadEntities :: IO Entities
 loadEntities = Entities
     <$> loadCoin
     <*> loadGrass
+    <*> loadOakTree
     <*> loadPeasant
     <*> loadPlayer
     <*> (PointerE <$> loadModel "assets/models/emerald.glb")
@@ -76,6 +88,14 @@ loadCoin = do
   -- Circle around the model origin.
   let collision = CollisionCircle 0 0.62
   return . CoinE collision $ model
+
+loadOakTree :: IO OakTreeE
+loadOakTree = do
+  model <- loadModel "assets/models/oak1.glb"
+  return $ OakTreeE {
+      oakTreeEModel = model,
+      oakTreeECullingBounds = CollisionSphere (V3 0 0 4.8692) 15
+    }
 
 loadPeasant :: IO PeasantE
 loadPeasant = do

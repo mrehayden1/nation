@@ -4,6 +4,7 @@ module App.Game.Coins (
 ) where
 
 import Control.Applicative
+import Control.Lens
 import Data.Tuple.Extra
 import Linear
 import Reflex
@@ -66,14 +67,14 @@ coins rClickE playerPosition playerDirection = do
   addCoin = ((:) .) . Coin
 
   makePlayerCollision playerE pos dir =
-    let transform = translate2D (V2 px pz) !*! rotate2D rot
+    let transform' = translate2D (V2 px pz) !*! rotate2D rot
         (V3 px _ pz) = pos
         (V3 dx _ dz) = dir
         rot = atan (dz/dx)
-    in transformCollision transform . playerECoinPickupCollision $ playerE
+    in transformCollision transform' . playerECoinPickupCollision $ playerE
 
-  findCollectedCoinsI :: CoinE -> [Coin] -> Float -> Collision -> [Int]
-  findCollectedCoinsI coinEntity cs time collision =
+  findCollectedCoinsI :: CoinE -> [Coin] -> Float -> Collision Float -> [Int]
+  findCollectedCoinsI coinEntity cs time playerCollision =
     fmap fst . filter (shouldCollect . snd) . zip [0..] $ cs
    where
     shouldCollect = liftA2
@@ -82,7 +83,6 @@ coins rClickE playerPosition playerDirection = do
       coinCollided
     coinCollided :: Coin -> Bool
     coinCollided Coin{..} =
-      let V3 x _ z = coinPosition
-          coinCollision' = coinECollision coinEntity
-      in collided collision . flip transformCollision coinCollision'
-          . translate2D $ V2 x z
+      let coinCollision = coinECollision coinEntity
+      in collided playerCollision . flip transformCollision coinCollision
+           . translate2D . (^. _xz) $ coinPosition

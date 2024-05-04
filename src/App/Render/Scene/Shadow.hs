@@ -13,6 +13,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import Linear
 
 import App.Matrix
+import App.Projection
 import App.Render.Env
 import App.Render.Model
 import App.Render.Pipeline

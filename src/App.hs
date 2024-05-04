@@ -41,8 +41,8 @@ multisampleSubsamples = Msaa16x
 vsyncEnabled :: Bool
 vsyncEnabled = False
 
-createRenderEnv :: IO App.Render.Env
-createRenderEnv = do
+createRenderEnv :: Entities -> IO App.Render.Env
+createRenderEnv entities = do
   jointModel <- fromGlbFile "assets/models/joint.glb"
   return $ App.Render.Env {
     envJointModel = jointModel,
@@ -50,7 +50,8 @@ createRenderEnv = do
     envRenderMeshes = True,
     envShowJoints = False,
     envViewportHeight = windowHeight,
-    envViewportWidth = windowWidth
+    envViewportWidth = windowWidth,
+    renderEnvEntities = entities
   }
 
 start :: IO ()
@@ -62,8 +63,8 @@ start = do
     -- Create graphics elements
     entities <- loadEntities
     -- Create renderer
-    renderFrame <- createRenderer win timeRef entities
-    renderEnv <- createRenderEnv
+    renderFrame <- createRenderer win timeRef
+    renderEnv <- createRenderEnv entities
     -- Enter game loop
     runHeadlessApp $ do
       startTime <- liftIO getPOSIXTime

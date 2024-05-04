@@ -14,7 +14,6 @@ import App.Env
 import App.Input
 import App.Output
 import App.Matrix
-import App.Vector
 
 startDirection :: V3 Float
 startDirection = V3 1 0 0
@@ -51,7 +50,7 @@ peasants coins = do
   peasantVelocity []      _   = V3 0 0 0
   peasantVelocity (c : _) pos =
     let d = coinPosition c - pos
-    in if magnitude d > epsilon
+    in if norm d > epsilon
          then normalize d ^* peasantMaxSpeed
          else V3 0 0 0
    where
