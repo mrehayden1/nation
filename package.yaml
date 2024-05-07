@@ -20,7 +20,6 @@ extra-source-files:
 description:         Nation the Game
 
 ghc-options:
-  -O2
   -Wall
   -Wcompat
   -Widentities
@@ -88,10 +87,12 @@ executables:
   nation:
     main:                Main.hs
     ghc-options:
+      -O2
       -threaded
       -rtsopts
       -with-rtsopts=-N
     ghc-prof-options:
+      -O2
       -threaded
       -fprof-auto
       -rtsopts
@@ -104,9 +105,10 @@ executables:
   map-test:
     main:                Main.hs
     ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
+      -O2
+      -threaded
+      -rtsopts
+      -with-rtsopts=-N
     source-dirs:         src-exe/MapTest
     dependencies:
     - base >= 4.7 && < 5
