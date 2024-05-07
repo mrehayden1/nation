@@ -31,8 +31,7 @@ data Env = Env {
   -- Viewport height in pixels
   envViewportHeight :: Int,
   -- Viewport width in pixels
-  envViewportWidth :: Int,
-  renderEnvEntities :: Entities
+  envViewportWidth :: Int
 }
 
 _envPipeline :: Lens' Env Pipeline

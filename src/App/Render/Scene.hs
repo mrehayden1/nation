@@ -1,9 +1,11 @@
 module App.Render.Scene (
   module App.Render.Scene.Scene,
 
-  createSceneRenderer
+  createSceneRenderer,
+  cullScene
 ) where
 
+import Control.Applicative
 import Control.Lens
 import Control.Monad
 import Control.Monad.Reader
@@ -15,6 +17,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import Linear
 
 import App.Camera as Cam
+import App.Entity.Collision3D
 import App.Matrix
 import App.Projection
 import App.Render.Env
@@ -189,3 +192,17 @@ createSceneRenderer shadowDepthMap = do
     GL.textureBinding GL.Texture2D $= Nothing
     GL.activeTexture $= GL.TextureUnit normalTextureUnit
     GL.textureBinding GL.Texture2D $= Nothing
+
+cullScene :: Scene -> Render Scene
+cullScene scene@Scene{..} = do
+  aspectRatio <- asks viewportAspectRatio
+  let collision = frustumCollision . cameraFrustum aspectRatio $ sceneCamera
+      culledElements =
+        filter (maybe True (collided3d collision) . elementCullingBounds)
+          $ sceneElements
+      scene' = scene { sceneElements = culledElements }
+  return scene'
+ where
+  frustumCollision :: (Epsilon a, Floating a) => Frustum a -> Collision3D a
+  frustumCollision =
+    liftA2 CollisionPolyhedron frustumPoints frustumFaceNormals

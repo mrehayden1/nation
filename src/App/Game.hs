@@ -3,7 +3,6 @@ module App.Game (
   module App.Output,
 
   Env(..),
-  MsaaSubsamples(..),
 
   Frame,
 
@@ -30,9 +29,6 @@ import App.Game.Peasant
 import App.Input
 import App.Projection
 import App.Output
-
-data MsaaSubsamples = MsaaNone | Msaa2x | Msaa4x | Msaa8x | Msaa16x
-  deriving (Eq, Enum)
 
 type Frame = (Input, Output)
 

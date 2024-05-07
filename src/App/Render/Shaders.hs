@@ -20,7 +20,7 @@ type ShaderLocation = (FilePath, GL.ShaderType)
 compileShaders :: [ShaderLocation] -> IO GL.Program
 compileShaders shaders = do
   program <- GL.createProgram
-  forM_ shaders . uncurry $ loadShader program
+  forM_ shaders . uncurry . loadShader $ program
   linkAndCheckProgram program
   return program
  where
@@ -34,7 +34,8 @@ compileShaders shaders = do
     return ()
    where
     compileAndCheck :: GL.Shader -> IO ()
-    compileAndCheck = checked GL.compileShader GL.compileStatus GL.shaderInfoLog "compile"
+    compileAndCheck =
+      checked GL.compileShader GL.compileStatus GL.shaderInfoLog "compile"
 
     extension :: String
     extension =
@@ -47,7 +48,8 @@ compileShaders shaders = do
         GL.VertexShader         -> "vert"
 
   linkAndCheckProgram :: GL.Program -> IO ()
-  linkAndCheckProgram = checked GL.linkProgram GL.linkStatus GL.programInfoLog "link"
+  linkAndCheckProgram =
+    checked GL.linkProgram GL.linkStatus GL.programInfoLog "link"
 
   checked :: (t -> IO ())
           -> (t -> GettableStateVar Bool)

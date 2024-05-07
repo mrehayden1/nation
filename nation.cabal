@@ -62,6 +62,7 @@ library
       App.Render.UI
       App.Render.Util
       App.Vector
+      App.Window
   other-modules:
       Paths_nation
   hs-source-dirs:
