@@ -1,6 +1,11 @@
 module App.Map (
   module Control.Monad.Random,
 
+  MapData(..),
+  MapGraph(..),
+  MapTree(..),
+
+  generateTestMapGeometry,
   generateMapGeometry,
   generateMapGraph,
   poiDiscRadius,
@@ -33,40 +38,89 @@ data MapGrid = Center | North | NorthEast | East | SouthEast | South
                  | SouthWest | West | NorthWest
  deriving (Eq)
 
-type Graph = ([V2 Float], [(V2 Float, V2 Float)])
+data MapGraph = MapGraph {
+  mapGraphNodes :: [V2 Float],
+  mapGraphEdges :: [(V2 Float, V2 Float)]
+}
 
-type MapData = (Graph, [Polygon Float], [Polygon Float], Polygon Float, [V2 Float])
+-- Map graph, rooms, paths, mesh, trees
+data MapData = MapData {
+  mapGraph :: MapGraph,
+  mapRoomGeometry :: [Polygon Float],
+  mapPathGeometry :: [Polygon Float],
+  mapMesh :: Polygon Float,
+  mapTrees :: [MapTree]
+}
+
+data MapTree = MapTree {
+  mapTreePosition :: V2 Float,
+  mapTreeRotation :: Float
+}
 
 -- The radius around of point of interest in which another can't exist
 poiDiscRadius :: Fractional a => a
-poiDiscRadius = 0.15
+poiDiscRadius = 15
 
+-- Two room map for testing gameplay
+generateTestMapGeometry :: Int -> MapData
+generateTestMapGeometry seed = flip evalRand (mkStdGen seed) $ do
+  t <- getRandomR (0, 2 * pi)
+  let start = 0
+      end = start + V2 (spread * sin t) (spread * cos t)
+  path <- perlinPath start end
+  rooms <- mapM perlinLoop [start, end]
+  let graph = MapGraph [start, end] [(start, end)]
+      paths = [path]
+      mesh = foldl' (\/) (App.Geometry.Polygon [] []) $ rooms ++ paths
+  trees <- generateTrees mesh
+  return . MapData graph rooms paths mesh $ trees
+ where
+  spread = 50
+
+-- Full map
 generateMapGeometry :: Int -> MapData
 generateMapGeometry seed = flip evalRand (mkStdGen seed) $ do
-  graph@(points, edges) <- generateMapGraph
-  rooms <- mapM perlinLoop points
-  paths <- mapM (uncurry perlinPath) edges
+  graph@MapGraph{..} <- generateMapGraph
+  rooms <- mapM perlinLoop mapGraphNodes
+  paths <- mapM (uncurry perlinPath) mapGraphEdges
   let mesh = foldl' (\/) (App.Geometry.Polygon [] []) $ rooms ++ paths
   trees <- generateTrees mesh
-  return (graph, rooms, paths, mesh, trees)
+  return . MapData graph rooms paths mesh $ trees
 
-generateTrees :: forall g a. (RandomGen g, Floating a, Ord a, Random a)
-  => Polygon a
-  -> Rand g [V2 a]
-generateTrees p =
-  let ps = [ V2 x y |
-             x <- fmap (subtract 0.5 . (/ n) . fromIntegral) [0..n :: Int],
-             y <- fmap (subtract 0.5 . (/ n) . fromIntegral) [0..n :: Int]
-           ]
-  in fmap (filter (not . inPolygon p)) . mapM addJitter $ ps
+generateTrees :: forall g. RandomGen g
+  => Polygon Float
+  -> Rand g [MapTree]
+generateTrees geometry = do
+  let vs = [ V2 x y | x <- ps, y <- ps ]
+  ps' <- fmap (filter test) . mapM addJitter $ vs
+  rs <- getRandomRs (0, 2 * pi)
+  return . zipWith MapTree ps' $ rs
  where
+  -- Tree density
   n :: forall n. Num n => n
-  n = 250
+  n = 25
 
-  addJitter :: V2 a -> Rand g (V2 a)
+  ps = fmap ((* (2 * treeCoverage)) . subtract 0.5 . (/ n) . fromIntegral)
+            [0..n :: Int]
+
+  -- The radius within the level geometry trees should be generated
+  treeDisc = 25
+  -- The range in each axis over which we should generate tree geometry +/- in
+  -- each axis
+  treeCoverage = 100
+
+  test = liftA2 (&&)
+                (not . pointInPolygon geometry)
+                -- TODO Doesn't check circle overlapping geometry edge, but
+                -- geometry is tight enough to overcome this
+                (flip any points . flip pointInDisc treeDisc)
+   where
+     points = concat . liftA2 (++) polygonFaces polygonHoles $ geometry
+
+  addJitter :: V2 Float -> Rand g (V2 Float)
   addJitter a = do
     t <- getRandomR (0, 2*pi)
-    r <- getRandomR (0, 0.0015)
+    r <- getRandomR (0, 5)
     let x = r * cos t
         y = r * sin t
     return $ a + V2 x y
@@ -75,7 +129,7 @@ perlinPath :: RandomGen g => V2 Float -> V2 Float -> Rand g (Polygon Float)
 perlinPath p0 p1 = do
   route <- perlinRoute p0 p1
   let pairs = zip route . drop 1 $ route
-      norms = fmap (uncurry $ (((* 0.01) . vecNormal) .) . (-)) pairs
+      norms = fmap (uncurry $ (vecNormal .) . (-)) pairs
       path' = (++) (zipWith (+) route norms)
                 . reverse . zipWith (-) route $ norms
   return . Polygon [path'] $ []
@@ -98,12 +152,12 @@ perlinRoute p0 p1 = do
         -- and end at the given points
         atten = sin $ d * pi
     in (+ (vec ^* d)) . (+ p0) . (*^ norm') . (* wiggle) . (* atten)
-         . circularPerlin dist $ t
+         . (/ 2) . (+ 1) . circularPerlin dist $ t
 
   n :: Int
   n = 100
 
-  wiggle = 0.025
+  wiggle = 2.5
 
 -- Make a comlpete loop by sampling a perlin distribution on the circumfrence
 -- of a circle
@@ -117,10 +171,13 @@ perlinLoop c = do
   point' :: Perlin -> Int -> V2 Float
   point' p n' =
     let t = (/ realToFrac n) . ((2 * pi) *) . realToFrac $ n'
-    in (+ c) . (*^ circlePoint t) . (* 0.08) . (+ 0.5) . (/ 2)
+    in (+ c) . (*^ circlePoint t) . (+ roomSize) . (* roomDeviation)
          . circularPerlin p $ t
 
-  n :: Int
+  roomSize = 25
+  roomDeviation = 2
+
+  -- Number of points in the loop
   n = 100
 
   -- The point on the unit circle at theta
@@ -128,16 +185,15 @@ perlinLoop c = do
   circlePoint = liftA2 V2 cos sin
 
 -- Sample a perlin distribution on the circumfrence of the unit cirlce at
--- theta
+-- theta to produce a value between -1 and 1
 circularPerlin :: (Floating a, Real a) => Perlin -> a -> a
-circularPerlin p = realToFrac . (/ 2) . (+ 1)
-  . noiseValue p . liftA2 (0,,) (realToFrac . cos) (realToFrac . sin)
+circularPerlin p = realToFrac . noiseValue p . liftA2 (0,,) (realToFrac . cos) (realToFrac . sin)
 
-generateMapGraph :: RandomGen g => Rand g ([V2 Float], [(V2 Float, V2 Float)])
+generateMapGraph :: RandomGen g => Rand g MapGraph
 generateMapGraph = do
   (ps :: [V2 Float :+ MapGrid]) <- generatePointsOfInterest
   let edges = validEdges . triangulate $ ps
-  return (fmap _core ps, fmap (bimap _core _core) edges)
+  return . MapGraph (fmap _core ps) $ fmap (bimap _core _core) edges
  where
   validEdges :: forall a. (Floating a, Ord a)
     => [(V2 a :+ MapGrid, V2 a :+ MapGrid)]
@@ -249,8 +305,8 @@ generatePointsOfInterest = do
    where
     valid :: V2 a -> Bool
     valid = liftA2 (&&)
-              (inAxisAlignedBoundingBox (V2 xMin yMin) (V2 xMax yMax))
-              (not . flip any (ps <> ps') . flip inDisc poiDiscRadius)
+              (pointInAabb (V2 xMin yMin) (V2 xMax yMax))
+              (not . flip any (ps <> ps') . flip pointInDisc poiDiscRadius)
 
 triangulate :: forall d. [V2 Float :+ d] -> [(V2 Float :+ d, V2 Float :+ d)]
 triangulate ps =

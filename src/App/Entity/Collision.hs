@@ -5,6 +5,7 @@ module App.Entity.Collision (
 
   collided,
 
+  -- TODO Move these to a common submodule not meant for public consumption
   polygonCircleOverlapping,
   polygonsOverlapping
 ) where
@@ -18,8 +19,7 @@ import Linear
 import App.Vector
 
 -- Collision detection is implemented in 2-dimensions using the separating axis
--- theorem where each entity's collision geometry is defined as a shape in the
--- x/z plane relative to the model geometry origin measured in metres.
+-- theorem where collision geometry is defined as a convex shape in the plane
 data Collision a =
     -- Centre and radius of a circle
     CollisionCircle (V2 a) a

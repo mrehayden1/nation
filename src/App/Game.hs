@@ -6,7 +6,7 @@ module App.Game (
 
   Frame,
 
-  app
+  game
 ) where
 
 import Control.Applicative
@@ -27,6 +27,7 @@ import App.Env
 import App.Game.Coins
 import App.Game.Peasant
 import App.Input
+import App.Map
 import App.Projection
 import App.Output
 
@@ -65,8 +66,8 @@ epsilon = 0.01
 debugCameraSpeed :: Float
 debugCameraSpeed = 6
 
-app :: forall t. App t (Dynamic t Frame)
-app = do
+game :: forall t. MapData -> App t (Dynamic t Frame)
+game MapData{..} = do
   inputE <- asks envInputE
   deltaT <- holdDyn 0 . fmap inputDeltaT $ inputE
   animationT <- foldDyn (+) 0 . fmap inputDeltaT $ inputE
@@ -144,6 +145,7 @@ app = do
         <*> overlayDebugQuad
         <*> overlayDebugInfo
         <*> shouldExit
+        <*> pure mapTrees
         <*> worldState
   -- Return the current input with the output.
   -- We can use undefined for the initial value because output is never

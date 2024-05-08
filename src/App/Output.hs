@@ -12,6 +12,7 @@ import Graphics.UI.GLFW
 import Linear
 
 import App.Camera
+import App.Map
 
 data Output = Output {
   outputConsoleOpen :: Bool,
@@ -21,6 +22,7 @@ data Output = Output {
   outputDebugQuadOverlay :: Bool,
   outputDebugInfoOverlay :: Bool,
   outputShouldExit :: Bool,
+  outputTrees :: [MapTree],
   outputWorld :: World
 }
 

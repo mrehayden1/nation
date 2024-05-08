@@ -4,11 +4,10 @@ module Main (
 
 import Linear
 import Graphics.Gloss
-import System.Random
 import Text.Printf
 
 import App.Geometry
-import App.Map as M
+import App.Map
 
 height, width :: Num a => a
 height = 1080
@@ -16,70 +15,42 @@ width  = 1920
 
 main :: IO ()
 main = displayMapGeometry
---main = displayPathRoomTest
-
-displayPathRoomTest :: IO ()
-displayPathRoomTest = do
-  gen <- newStdGen
-  let (path, room) = flip evalRand gen $
-        (,) <$> perlinPath p0 p1 <*> perlinLoop p0
-      path' = path \\ room
-      both  = path \/ room
-  display
-    (InWindow
-       "Map generation visualiser" -- window title
-       (width, height)   -- window size
-       (10, 10))         -- window position
-    (light black)        -- background color
-    $ Pictures [
-        -- Room
-        --drawPolygon room,
-        -- Path
-        --drawPolygon path,
-        -- Room \/ path
-        drawPolygon both,
-        -- Points
-        Pictures . fmap mkPointText $ [p0, p1],
-        Pictures . fmap (mkPoint 0.1) $ [p0, p1]
-      ]
- where
-  p0 = 0
-  p1 = 0.1
 
 displayMapGeometry :: IO ()
 displayMapGeometry = do
   --seed <- randomIO
+  -- Some seeds that terminate
   let seed = -662982938059047685
   --let seed = 2108559135846489037
   --let seed = -1967577792088230408
-      ((points, edges), rooms, paths, mesh, trees) = generateMapGeometry seed
-  --printf "Seed: %d\n" seed
+  --    MapData{..} = generateMapGeometry seed
+      MapData{..} = generateTestMapGeometry seed
+      MapGraph{..} = mapGraph
       picture =
-        -- Make co-ordinate system match our game world, right-handed, north-east =
-        -- (+x, -y)
-        --Scale 1 (-1)
-        Scale 1 1
+        -- Make co-ordinate system match our game world (right-handed, +y = up)
+        Scale 1 (-1)
           . Pictures $ [
               -- Points
-              Pictures . fmap mkPointText $ points,
-              Pictures . fmap (mkPoint 0.1) $ points,
+              Pictures . fmap mkPointText $ mapGraphNodes,
+              Pictures . fmap (mkPoint 10) $ mapGraphNodes,
               -- Edges
-              --Pictures . fmap (uncurry mkLine) $ edges,
+              --Pictures . fmap (uncurry mkLine) $ mapGraphEdges,
               -- Poisson discs
-              --Pictures . fmap (mkDisc poiDiscRadius) $ points,
+              --Pictures . fmap (mkDisc poiDiscRadius) $ mapGraphNodes,
               -- Room generatable area
-              --Pictures . fmap (mkDisc (poiDiscRadius / 2)) $ points,
+              --Pictures . fmap (mkDisc (poiDiscRadius / 2)) $ mapGraphNodes,
               -- Grid lines
-              Pictures . fmap (uncurry mkLine) $ gridLines,
+              --Pictures . fmap (uncurry mkLine) $ gridLines,
               -- Shapes
-              --Pictures . fmap drawPolygon $ rooms,
+              --Pictures . fmap drawPolygon $ mapRoomGeometry,
               -- Paths
-              --Pictures . fmap drawPolygon $ paths
+              --Pictures . fmap drawPolygon $ mapPathGeometry
               -- Mesh
-              drawPolygon mesh,
+              drawPolygon mapMesh,
               -- Trees
-              Pictures . fmap (mkPoint 0.5) $ trees
+              Pictures . fmap (mkPoint 50 . mapTreePosition) $ mapTrees
             ]
+  --printf "Seed: %d\n" seed
   display
     (InWindow
        "Map generation visualiser" -- window title
@@ -99,9 +70,9 @@ drawPolygon :: Polygon Float -> Picture
 drawPolygon p =
   Pictures [
     Pictures . fmap mkShape . polygonFaces $ p,
-    Pictures . fmap (Pictures . fmap (mkPoint 0.1)) . polygonFaces $ p,
+    Pictures . fmap (Pictures . fmap (mkPoint 10)) . polygonFaces $ p,
     Pictures . fmap mkShape . polygonHoles $ p,
-    Pictures . fmap (Pictures . fmap (mkPoint 0.1)) . polygonHoles $ p
+    Pictures . fmap (Pictures . fmap (mkPoint 10)) . polygonHoles $ p
   ]
 
 mkLine :: V2 Float -> V2 Float -> Picture
@@ -110,7 +81,7 @@ mkLine x y = Color (dark white) . Line . fmap (vec2ToTuple . (* height))
 
 mkPointText :: V2 Float -> Picture
 mkPointText (V2 x y) = Translate (x * height) (y * height) . Color (dark white)
-  . Scale 0.01 0.01 . Text . printf "%.10f, %.10f" x $ y
+  . Text . printf "%.10f, %.10f" x $ y
 
 mkPoint :: Float -> V2 Float -> Picture
 mkPoint sz = Color (dark white) . ($ ThickCircle sz (sz * 2))

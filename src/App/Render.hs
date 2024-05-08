@@ -12,6 +12,7 @@ import Linear
 import App.Entity
 import App.Entity.Collision3D
 import App.Game hiding (Env)
+import App.Map
 import App.Matrix
 import App.Quaternion as Q
 import App.Render.Debug
@@ -19,6 +20,7 @@ import App.Render.Env
 import App.Render.Scene as Scene
 import App.Render.Scene.Shadow
 import App.Render.UI
+import App.Vector
 
 createRenderer :: IORef POSIXTime
                     -> Entities
@@ -49,10 +51,7 @@ makeScene :: Entities -> Frame -> Scene
 makeScene Entities{..} (_, Output{..}) =
   let World{..} = outputWorld
       App.Game.Daylight{..} = worldDaylight
-      trees = fmap (makeTree entitiesOakTree)
-                   [V3 15 0 15]
-                   --[V3 (x*15) 0 (y*15) | x <- [-15..15], y <- [-15..15]]
-                   --[V3 (x*15) 0 (y*15) | x <- [-124..125], y <- [-124..125]]
+      trees = fmap (makeTree entitiesOakTree) outputTrees
       peasants = fmap (makePeasant entitiesPeasant worldAnimationTime) worldPeasants
       coins = fmap (makeCoin entitiesCoin worldAnimationTime) worldCoins
   in Scene {
@@ -128,14 +127,17 @@ makeScene Entities{..} (_, Output{..}) =
       elementShadow = True
     }
 
-  makeTree :: OakTreeE -> V3 Float -> Element
-  makeTree oakTreeE p =
-    Element {
-      elementAnimation = Nothing,
-      elementCullingBounds = Just . transformCollision3d (translate p)
-        . oakTreeECullingBounds $ oakTreeE,
-      elementModel = oakTreeEModel oakTreeE,
-      elementPosition = p,
-      elementRotation = Q.identity,
-      elementShadow = True
-    }
+  makeTree :: OakTreeE -> MapTree -> Element
+  makeTree oakTreeE MapTree{..} =
+    let V2 x z = mapTreePosition
+        p = V3 x 0 z
+    in Element {
+        elementAnimation = Nothing,
+        elementCullingBounds = Just . transformCollision3d (translate p)
+          . oakTreeECullingBounds $ oakTreeE,
+        elementModel = oakTreeEModel oakTreeE,
+        elementPosition = p,
+        elementRotation = Q.fromVectors (V3 1 0 0) . eulerDirection 0
+          $ mapTreeRotation,
+        elementShadow = True
+      }

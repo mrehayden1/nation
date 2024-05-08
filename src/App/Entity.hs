@@ -1,26 +1,29 @@
 module App.Entity (
   Entities(..),
+  Collision,
+  Model,
 
   CoinE(coinECollision, coinEModel),
   GrassE(grassEModel),
+
   OakTreeE(
     oakTreeEModel,
     oakTreeECullingBounds
   ),
+
   PlayerE(
     playerECoinPickupCollision,
     playerECollision,
     playerEModel
   ),
+
   PeasantE(
     peasantECollision,
     peasantECoinVision,
     peasantEModel
   ),
-  PointerE(pointerEModel),
 
-  Collision,
-  Model,
+  PointerE(pointerEModel),
 
   loadEntities
 ) where

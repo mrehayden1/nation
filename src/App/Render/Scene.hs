@@ -199,7 +199,7 @@ cullScene scene@Scene{..} = do
   let collision = frustumCollision . cameraFrustum aspectRatio $ sceneCamera
       culledElements =
         filter (maybe True (collided3d collision) . elementCullingBounds)
-          $ sceneElements
+               sceneElements
       scene' = scene { sceneElements = culledElements }
   return scene'
  where

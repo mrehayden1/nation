@@ -16,6 +16,7 @@ import Reflex.Network
 import App.Entity
 import App.Env
 import App.Game
+import App.Map
 import App.Render
 import App.Render.Model
 import App.Window
@@ -37,6 +38,8 @@ createRenderEnv = do
 
 start :: IO ()
 start = do
+  let seed = -662982938059047685
+      mapData = generateTestMapGeometry seed
   putStrLn $ "Starting " ++ appName ++ "..."
   bracket (initWindow appName) closeWindow $ \win -> do
     -- Used to get the time the frame was last refreshed
@@ -78,7 +81,7 @@ start = do
             envWindowHeight = windowHeight,
             envWindowWidth = windowWidth
           }
-      frameE <- fmap updated . flip runReaderT appEnv $ app
+      frameE <- fmap updated . flip runReaderT appEnv $ game mapData
       let shouldExitE = void . ffilter id . fmap (outputShouldExit . snd)
                           $ frameE
           shutdownE = leftmost [shouldExitE, windowClose]
