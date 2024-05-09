@@ -1,6 +1,8 @@
 module App.Geometry.Types (
+  Face,
   Polygon(..),
-  Face
+
+  Tristrip(..)
 ) where
 
 import Linear
@@ -15,3 +17,7 @@ data Polygon a = Polygon {
 instance Functor Polygon where
   fmap f (Polygon faces holes) =
     Polygon (fmap (fmap (fmap f)) faces) (fmap (fmap (fmap f)) holes)
+
+newtype Tristrip a = Tristrip {
+  unTristrip :: [[V2 a]]
+}

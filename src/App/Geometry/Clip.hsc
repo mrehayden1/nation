@@ -4,10 +4,7 @@ module App.Geometry.Clip (
   union,
   xor,
 
-  (\\),
-  (/\),
-  (\/),
-  (<+>)
+  toTristrip
 ) where
 
 import Data.List (partition)
@@ -35,6 +32,7 @@ pattern GPC_XOR = GpcOp (#const GPC_XOR)
 pattern GPC_UNION :: GpcOp
 pattern GPC_UNION = GpcOp (#const GPC_UNION)
 
+
 data GpcVertex = GpcVertex { unGpcVertex :: V2 CDouble }
   deriving (Show)
 
@@ -51,6 +49,7 @@ instance Storable GpcVertex where
   poke p (GpcVertex (V2 x y)) = do
     pokeByteOff p (#offset gpc_vertex, x) x
     pokeByteOff p (#offset gpc_vertex, y) y
+
 
 data GpcVertexList = GpcVertexList { unGpcVertexList ::  [V2 CDouble] }
   deriving (Show)
@@ -74,6 +73,7 @@ instance Storable GpcVertexList where
     vertices <- newArray . fmap GpcVertex $ vs
     pokeByteOff p (#offset gpc_vertex_list, vertex) vertices
 
+
 data GpcPolygon = GpcPolygon { unGpcPolygon :: [([V2 CDouble], Bool)] }
   deriving (Show)
 
@@ -83,8 +83,8 @@ instance Storable GpcPolygon where
   alignment _ = (#alignment gpc_polygon)
 
   peek p = do
-    (numContours' :: CInt) <- peekByteOff p (#offset gpc_polygon, num_contours)
-    let numContours = fromIntegral numContours'
+    numContours <- fmap (fromIntegral :: CInt -> Int) . peekByteOff p
+      $ (#offset gpc_polygon, num_contours)
     (holesPtr :: Ptr CInt) <- peekByteOff p (#offset gpc_polygon, hole)
     holes <- fmap (fmap toBool) . peekArray numContours $ holesPtr
     contoursPtr <- peekByteOff p (#offset gpc_polygon, contour)
@@ -143,23 +143,43 @@ xor :: RealFrac a => Polygon a -> Polygon a -> Polygon a
 xor = clip GPC_XOR
 
 
-(\\) :: RealFrac a => Polygon a -> Polygon a -> Polygon a
-(\\) = diff
+data GpcTristrip = GpcTristrip { unGpcTristrip :: [[V2 CDouble]] }
 
-(/\) :: RealFrac a => Polygon a -> Polygon a -> Polygon a
-(/\) = intersection
+instance Storable GpcTristrip where
+  sizeOf _ = (#size gpc_tristrip)
 
-(\/) :: RealFrac a => Polygon a -> Polygon a -> Polygon a
-(\/) = union
+  alignment _ = (#alignment gpc_tristrip)
 
-(<+>) :: RealFrac a => Polygon a -> Polygon a -> Polygon a
-(<+>) = xor
+  peek p = do
+    numStrips <- fmap (fromIntegral :: CInt -> Int) . peekByteOff p
+      $ (#offset gpc_tristrip, num_strips)
+    stripPtr <- peekByteOff p (#offset gpc_tristrip, strip)
+    strips <- fmap (fmap unGpcVertexList) . peekArray numStrips
+                $ stripPtr
+    return . GpcTristrip $ strips
 
-infixl \\, /\, \/, <+>
+  poke p (GpcTristrip strips) = do
+    let numStrips = fromIntegral . length $ strips :: CInt
+    pokeByteOff p (#offset gpc_tristrip, num_strips) numStrips
+    stripsPtr <- newArray . fmap GpcVertexList $ strips
+    pokeByteOff p (#offset gpc_tristrip, strip) stripsPtr
 
-{-
-test =
-  let p = Polygon [[V2 1 1, V2 1 (-0.5), V2 (-0.5) (-0.5), V2 (-0.5) 1]] []
-      q = Polygon [[V2 (-1) (-1), V2 (-1) 0.5, V2 0.5 0.5, V2 0.5 (-1)]] []
-  in union p q
--}
+foreign import capi "gpc.h gpc_polygon_to_tristrip" gpc_polygon_to_tristrip
+  :: Ptr GpcPolygon -> Ptr GpcTristrip -> IO ()
+
+foreign import capi "gpc.h gpc_free_tristrip" gpc_free_tristrip
+  :: Ptr GpcTristrip -> IO ()
+
+fromGpcTristrip :: Fractional a => GpcTristrip -> Tristrip a
+fromGpcTristrip = Tristrip . fmap (fmap (fmap realToFrac)) . unGpcTristrip
+
+toTristrip:: RealFrac a => Polygon a -> Tristrip a
+toTristrip p =
+  unsafePerformIO $
+    alloca $ \p' ->
+      alloca $ \t' -> do
+        poke p' . toGpcPolygon $ p
+        gpc_polygon_to_tristrip p' $ t'
+        t <- peek t'
+        gpc_free_tristrip t'
+        return . fromGpcTristrip $ t
