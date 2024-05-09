@@ -32,10 +32,10 @@ import App.Render.Text
 import App.Render.Util
 import App.Vector
 
-data FpsStatistics = FpsStatistics {
-  fpsMean :: Float,
-  fpsLow :: Float,
-  fpsHigh :: Float
+data FrameTimes = FrameTimes {
+  frameTimeMean :: Float,
+  frameTimeLow :: Float,
+  frameTimeHigh :: Float
 }
 
 -- TODO Refactor this and createDebugInfoOverlayer
@@ -124,12 +124,12 @@ createDebugInfoOverlayer timeRef = do
   return . renderDebugText deltasRef fpsRef font $ renderText
  where
   renderDebugText :: IORef [Float]
-    -> IORef (Maybe (POSIXTime, FpsStatistics))
+    -> IORef (Maybe (POSIXTime, FrameTimes))
     -> MsdfFont
     -> (Text -> Bool -> Render ())
     -> Frame
     -> Render ()
-  renderDebugText deltasRef fpsRef font renderText (Input{..}, Output{..}) = do
+  renderDebugText deltasRef frameTimesRef font renderText (Input{..}, Output{..}) = do
     let World{..} = outputWorld
         Camera{..} = worldCamera
         V3 camX camY camZ = camPos
@@ -137,14 +137,14 @@ createDebugInfoOverlayer timeRef = do
         V3 pointerX pointerY pointerZ = worldPointerPosition
         V3 playerX playerY playerZ = worldPlayerPosition
         V3 playerVx playerVy playerVz = worldPlayerVelocity
-    FpsStatistics{..} <- fpsStats
+    FrameTimes{..} <- fpsStats
     renderLines [
         -- FPS counter
         printf
-          "Frame rate: mean %  dfps, low %  dfps, high %  dfps"
-          (round fpsMean :: Int)
-          (round fpsLow :: Int)
-          (round fpsHigh :: Int),
+          "Frame time: mean % .1fms , low % .1fms , high % .1fms"
+          (frameTimeMean * 1000)
+          (frameTimeLow * 1000)
+          (frameTimeHigh * 1000),
         -- Player position
         printf "Player: x% .5f y x% .5f z% .5f" playerX playerY playerZ,
         printf "        x% .5f y x% .5f z% .5f m/s" playerVx playerVy playerVz,
@@ -181,31 +181,28 @@ createDebugInfoOverlayer timeRef = do
         renderText t True
         deleteText t
 
-    fpsStats :: Render FpsStatistics
+    fpsStats :: Render FrameTimes
     fpsStats = do
       time' <- liftIO $ readIORef timeRef
       when (inputDeltaT > 0) . liftIO . modifyIORef deltasRef $ (inputDeltaT :)
       deltas <- liftIO $ readIORef deltasRef
       liftIO $
-        modifyIORef fpsRef (maybe (Just (time', FpsStatistics 0 0 0)) Just)
-      (lastUpdated, _) <- fmap fromJust . liftIO . readIORef $ fpsRef
+        modifyIORef frameTimesRef (maybe (Just (time', FrameTimes 0 0 0)) Just)
+      (lastUpdated, _) <- fmap fromJust . liftIO . readIORef $ frameTimesRef
       -- Update the stored fps count every half second only if there are deltas
       when ((not . null $ deltas) && floor (time' * 2) > (floor (lastUpdated * 2) :: Int)) $ do
-        let fpss = fmap recip deltas
-            n = length fpss
-            fpsSum = sum fpss
-            fpss' = List.sort fpss
-            mean = if fpsSum > 0
-                     then fpsSum / realToFrac n
-                     else 0
-            stats = FpsStatistics {
-                      fpsMean = mean,
-                      fpsLow = head fpss',
-                      fpsHigh = fpss' !! (n - 1)
+        let n = length deltas
+            deltaSum = sum deltas
+            deltasSorted = List.sort deltas
+            deltaMean = if deltaSum > 0 then deltaSum / realToFrac n else 0
+            stats = FrameTimes {
+                      frameTimeMean = deltaMean,
+                      frameTimeLow = head deltasSorted,
+                      frameTimeHigh = deltasSorted !! (n - 1)
                     }
-        liftIO . writeIORef fpsRef . Just $ (time', stats)
+        liftIO . writeIORef frameTimesRef . Just $ (time', stats)
         liftIO $ writeIORef deltasRef []
-      fmap (snd . fromJust) . liftIO . readIORef $ fpsRef
+      fmap (snd . fromJust) . liftIO . readIORef $ frameTimesRef
 
 createDebugQuadOverlayer :: GL.TextureObject -> IO (Render ())
 createDebugQuadOverlayer texture = do
