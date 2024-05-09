@@ -146,7 +146,7 @@ executable map-test
       TypeApplications
       TypeFamilies
       TypeOperators
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -O2 -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -O2 -threaded -rtsopts -with-rtsopts=-N -j
   build-depends:
       base >=4.7 && <5
     , gloss
@@ -180,8 +180,8 @@ executable nation
       TypeApplications
       TypeFamilies
       TypeOperators
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -O2 -threaded -rtsopts -with-rtsopts=-N
-  ghc-prof-options: -O2 -threaded -fprof-auto -rtsopts "-with-rtsopts=-N -p"
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -O2 -threaded -rtsopts -with-rtsopts=-N -j
+  ghc-prof-options: -O2 -threaded -fprof-auto -rtsopts "-with-rtsopts=-N -p" -j
   build-depends:
       base >=4.7 && <5
     , nation

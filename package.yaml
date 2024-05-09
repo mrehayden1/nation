@@ -91,12 +91,14 @@ executables:
       -threaded
       -rtsopts
       -with-rtsopts=-N
+      -j
     ghc-prof-options:
       -O2
       -threaded
       -fprof-auto
       -rtsopts
       "-with-rtsopts=-N -p"
+      -j
     source-dirs:         src-exe/Game
     dependencies:
     - base >= 4.7 && < 5
@@ -109,6 +111,7 @@ executables:
       -threaded
       -rtsopts
       -with-rtsopts=-N
+      -j
     source-dirs:         src-exe/MapTest
     dependencies:
     - base >= 4.7 && < 5
