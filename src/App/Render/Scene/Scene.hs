@@ -18,7 +18,8 @@ data Scene = Scene {
 } deriving (Show)
 
 data Daylight = Daylight {
-  daylightAmbientIntensity :: Float,
+  daylightColor :: V3 Float,
+  daylightIntensity :: Float,
   daylightPitch :: Float,
   daylightYaw :: Float
 } deriving (Show)

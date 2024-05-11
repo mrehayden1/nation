@@ -74,8 +74,9 @@ createSceneRenderer shadowDepthMap = do
       $ aspectRatio
     pipelineUniform pipeline "lightViewM"
       $= (lightView :: GL.GLmatrix GL.GLfloat)
-    -- Set ambient intensity
-    pipelineUniform pipeline "ambientIntensity" $= daylightAmbientIntensity
+    -- Set daylight
+    pipelineUniform pipeline "daylightColor" $= toGlVector3 daylightColor
+    pipelineUniform pipeline "daylightIntensity" $= daylightIntensity
     -- Set light direction
     pipelineUniform pipeline "lightDirection" $=
       (toGlVector3 . eulerDirection daylightPitch $ daylightYaw)

@@ -97,7 +97,8 @@ makeScene Entities{..} (_, Output{..}) =
          ]
        ],
        sceneDaylight = Scene.Daylight {
-         daylightAmbientIntensity = daylightAmbientIntensity,
+         daylightColor = daylightColor,
+         daylightIntensity = daylightIntensity,
          daylightPitch = daylightPitch,
          daylightYaw = daylightYaw
        }

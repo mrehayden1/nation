@@ -40,7 +40,8 @@ data World = World {
 }
 
 data Daylight = Daylight {
-  daylightAmbientIntensity :: Float,
+  daylightColor :: V3 Float,
+  daylightIntensity :: Float,
   -- Pointing at the sun
   daylightPitch :: Float,
   daylightYaw :: Float

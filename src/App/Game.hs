@@ -118,9 +118,11 @@ game MapData{..} = do
   debugCam <- debugCamera deltaT playerCamera debugCameraOn heldKeys cursor
   let camera = debugCameraOn >>= \d -> if d then debugCam else playerCamera
   -- Lighting
-  sunPitch <- foldDyn (uncurry updateSunPitch) (pi / 2) . updated
-    $ (,) <$> deltaT <*> heldKeys
-  let ambientLight = fmap ((* 1) . max 0 . sin) sunPitch
+  sunPitch <- foldDyn updateSunPitch pi . updated $ deltaT
+  let lightIntensity = fmap ((+ 0.5) . (* 0.5) . max 0 . sin)
+                            sunPitch
+      lightGreen = fmap ((+ 0.6) . (* 0.4)) lightIntensity
+      lightColour = V3 1 <$> lightGreen <*> lightIntensity
   -- Coins
   (looseCoins, playerCoins) <- coins rClickE playerPosition playerDirection
   -- Peasants
@@ -130,7 +132,7 @@ game MapData{..} = do
         <$> animationT
         <*> camera
         <*> looseCoins
-        <*> (Daylight <$> ambientLight <*> sunPitch <*> pure (pi / 8))
+        <*> (Daylight <$> lightColour <*> lightIntensity <*> sunPitch <*> pure (pi / 8))
         <*> peasants'
         <*> playerCoins
         <*> playerDirection
@@ -183,14 +185,10 @@ game MapData{..} = do
          camYaw = pi / 2
        }
 
-  updateSunPitch :: Float -> [(GLFW.Key, GLFW.ModifierKeys)] -> Float -> Float
-  updateSunPitch dt ks pitch = (+ pitch) . sum . fmap keyChange $ ks
+  updateSunPitch :: Float -> Float -> Float
+  updateSunPitch dt pitch = (+ pitch) . (* angularVelocity) $ dt
    where
-    keyChange (GLFW.Key'Equal, _) = angularVelocity * dt
-    keyChange (GLFW.Key'Minus, _) = negate angularVelocity * dt
-    keyChange _                   = 0
-    -- Radians per second
-    angularVelocity = 1
+    angularVelocity = -(2 * pi) / (5 * 60)
 
   debugCamera :: Dynamic t Float
     -> Dynamic t (Camera Float)

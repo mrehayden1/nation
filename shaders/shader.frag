@@ -24,7 +24,8 @@ uniform float roughnessFactor;
 uniform bool hasNormalTexture;
 uniform float normalTextureScale;
 
-uniform float ambientIntensity;
+uniform vec3 daylightColor;
+uniform float daylightIntensity;
 uniform vec3 camPos;
 uniform bool doubleSided;
 uniform vec3 lightDirection;
@@ -111,7 +112,7 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 
 void main()
 {
-  vec3 lightColour = vec3(1.0f, 1.0f, 1.0f);
+  vec3 lightColour = daylightColor * daylightIntensity;
 
   vec4 baseColor;
 
@@ -181,7 +182,7 @@ void main()
   vec3 Lo = (1 - shadow) * (kD * baseColor.rgb / PI + specular) * radiance * NdotL;
 
   // TODO Ambient occlusion
-  vec3 ambient = ambientIntensity * lightColour * baseColor.rgb;// * ao;
+  vec3 ambient = daylightIntensity * lightColour * baseColor.rgb;// * ao;
 
   vec3 lighting = ambient + Lo;
 
