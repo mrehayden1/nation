@@ -137,9 +137,9 @@ createSceneRenderer shadowDepthMap = do
     -> Vector (M44 Float)
     -> MeshPrimitive
     -> Render ()
-  renderMeshPrimitive modelMatrix' bindMatrix' jointMatrices' MeshPrimitive{..} = do
+  renderMeshPrimitive modelMatrix' bindMatrix' jointMatrices' meshPrim = do
     pipeline <- asks envPipeline
-    let Material{..} = meshPrimMaterial
+    let Material{..} = meshPrimMaterial meshPrim
     -- Base color
     pipelineUniform pipeline "baseColorFactor"
       $= toGlVector4 materialBaseColorFactor
@@ -182,9 +182,11 @@ createSceneRenderer shadowDepthMap = do
     -- Set joint matrices
     liftIO $ pipelineUniformMatrix4v pipeline "jointM" jointMatrices'
     -- Draw
-    GL.bindVertexArrayObject $= Just meshPrimVao
-    liftIO $ GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt
-      nullPtr
+    GL.bindVertexArrayObject $= (Just . meshPrimVao $ meshPrim)
+    liftIO $ GL.drawElements (meshPrimGlMode meshPrim)
+                             (meshPrimNumIndices meshPrim)
+                             GL.UnsignedInt
+                             nullPtr
     -- Unbind
     GL.bindVertexArrayObject $= Nothing
     GL.activeTexture $= GL.TextureUnit baseColorTextureUnit

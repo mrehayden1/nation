@@ -10,7 +10,14 @@ module App.Render.Model.Model (
 
   Mesh,
 
-  MeshPrimitive(..),
+  MeshPrimitive(
+    meshPrimMaterial,
+    meshPrimGlMode,
+    meshPrimVao,
+    meshPrimVbo,
+    meshPrimEbo,
+    meshPrimNumIndices
+  ),
   GL.PrimitiveMode(..),
   meshPrimitive,
 

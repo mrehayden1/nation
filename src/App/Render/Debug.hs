@@ -95,9 +95,9 @@ createDebugGizmoOverlayer = do
     mapM_ (mapM_ (renderMeshPrimitive bindMatrix)) nodeMesh
 
   renderMeshPrimitive :: M44 Float -> MeshPrimitive -> Render ()
-  renderMeshPrimitive bindMatrix' MeshPrimitive{..} = do
+  renderMeshPrimitive bindMatrix' meshPrim = do
     pipeline <- asks envPipeline
-    let Material{..} = meshPrimMaterial
+    let Material{..} = meshPrimMaterial meshPrim
     -- Set textures
     pipelineUniform pipeline "baseColorFactor"
       $= toGlVector4 materialBaseColorFactor
@@ -110,9 +110,11 @@ createDebugGizmoOverlayer = do
     bindMatrix <- liftIO . toGlMatrix $ bindMatrix'
     pipelineUniform pipeline "bindM" $= bindMatrix
     -- Draw
-    GL.bindVertexArrayObject $= Just meshPrimVao
-    liftIO $ GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt
-      nullPtr
+    GL.bindVertexArrayObject $= (Just . meshPrimVao $ meshPrim)
+    liftIO $ GL.drawElements (meshPrimGlMode meshPrim)
+                             (meshPrimNumIndices meshPrim)
+                             GL.UnsignedInt
+                             nullPtr
     GL.bindVertexArrayObject $= Nothing
 
 createDebugInfoOverlayer :: IORef POSIXTime -> IO (Frame -> Render ())

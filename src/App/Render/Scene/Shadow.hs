@@ -121,9 +121,9 @@ createShadowMapper = do
     -> Vector (M44 Float)
     -> MeshPrimitive
     -> Render ()
-  renderMeshPrimitive modelMatrix' bindMatrix' jointMatrices' MeshPrimitive{..} = do
+  renderMeshPrimitive modelMatrix' bindMatrix' jointMatrices' meshPrim = do
     pipeline <- asks envPipeline
-    let Material{..} = meshPrimMaterial
+    let Material{..} = meshPrimMaterial meshPrim
     -- Set base color texture (for alpha testing)
     pipelineUniform pipeline "baseColorFactor"
       $= toGlVector4 materialBaseColorFactor
@@ -151,9 +151,11 @@ createShadowMapper = do
     -- Set joint matrices
     liftIO $ pipelineUniformMatrix4v pipeline "jointM" jointMatrices'
     -- Draw
-    GL.bindVertexArrayObject $= Just meshPrimVao
-    liftIO $ GL.drawElements meshPrimGlMode meshPrimNumIndices GL.UnsignedInt
-      nullPtr
+    GL.bindVertexArrayObject $= (Just . meshPrimVao $ meshPrim)
+    liftIO $ GL.drawElements (meshPrimGlMode meshPrim)
+                             (meshPrimNumIndices meshPrim)
+                             GL.UnsignedInt
+                             nullPtr
     GL.bindVertexArrayObject $= Nothing
     -- Unbind
     GL.bindVertexArrayObject $= Nothing
