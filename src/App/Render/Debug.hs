@@ -147,6 +147,11 @@ createDebugInfoOverlayer timeRef = do
           (frameTimeMean * 1000)
           (frameTimeLow * 1000)
           (frameTimeHigh * 1000),
+        printf
+          "FPS       : mean %  dfps, low %  dfps , high %  dfps"
+          (round . recip $ frameTimeMean :: Int)
+          (round . recip $ frameTimeHigh :: Int)
+          (round . recip $ frameTimeLow :: Int),
         -- Player position
         printf "Player: x% .5f y x% .5f z% .5f" playerX playerY playerZ,
         printf "        x% .5f y x% .5f z% .5f m/s" playerVx playerVy playerVz,
