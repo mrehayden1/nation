@@ -30,7 +30,6 @@ module App.Render.Model.Model (
 
 import Control.Lens
 import Data.Map (Map)
-import Data.Proxy
 import Data.StateVar
 import Data.Text (Text)
 import Data.Vector (Vector)
@@ -53,8 +52,7 @@ data Model = Model {
 data Node = Node {
   nodeAnimations :: Map Text [G.Channel],
   nodeChildren :: Vector Int,
-  nodeIsJoint :: Bool,
-  nodeMesh :: Maybe Mesh,
+  nodeMesh :: Mesh,
   nodeRotation :: Quaternion Float,
   nodeScale :: V3 Float,
   nodeSkin :: Maybe Int,
@@ -103,76 +101,108 @@ meshPrimitive material mode ixs positions normals tangents texCoords joints weig
   -- Create and bind VAO
   vao <- GL.genObjectName
   GL.bindVertexArrayObject $= Just vao
-  -- Load indices
+  -- Buffer index buffer
   let numIxs = length ixs
   ebo <- GL.genObjectName
   GL.bindBuffer GL.ElementArrayBuffer $= Just ebo
   SV.unsafeWith (V.convert ixs) $ \(ptr :: Ptr Word32) -> do
     let size = fromIntegral . (* sizeOf (undefined :: Word32)) $ numIxs
     GL.bufferData GL.ElementArrayBuffer $= (size, ptr, GL.StaticDraw)
-  -- Load vertex data
+  -- Buffer vertex data and set vertex attributes
   let numVertices = V.length positions
   vbos <- sequence [
-      loadVertexAttribute 0 3 positions,
-      loadVertexAttribute 1 3 normals,
-      loadVertexAttribute 2 4 tangents,
-      loadVertexAttribute 3 2 texCoords,
-      -- Pad joints and weights with zeros if empty.
-      loadVertexAttribute 4 4
+      -- Vertex attribute location 0: Position
+      vertexAttribute 0 positions,
+      -- Vertex attribute location 1: Normal
+      vertexAttribute 1 normals,
+      -- Vertex attribute location 2: Tangents
+      vertexAttribute 2 tangents,
+      -- Vertex attribute location 3: Texture co-ordinates
+      vertexAttribute 3 texCoords,
+
+      -- Optional skinned mesh attributes (We pad joints and weights with
+      -- zeros if unused.)
+
+      -- Vertex attribute location 4: Joint
+      vertexAttribute 4
         $ joints V.++ V.replicate (numVertices - length joints) 0,
-      loadVertexAttribute 5 4
+      -- Vertex attribute location 5: Joint weights
+      vertexAttribute 5
         $ weights V.++ V.replicate (numVertices - length weights) 0
     ]
   GL.bindVertexArrayObject $= Nothing
   GL.bindBuffer GL.ElementArrayBuffer $= Nothing
-  GL.bindBuffer GL.ArrayBuffer $= Nothing
   return . MeshPrimitive material mode vao vbos ebo . fromIntegral $ numIxs
  where
-  loadVertexAttribute :: forall a. (Storable a, VertexAttribute a)
+  vertexAttribute :: forall a. (VertexAttribute a, Storable a)
     => Int
-    -> Int
     -> Vector a
     -> IO GL.BufferObject
-  loadVertexAttribute location components attrs = do
+  vertexAttribute location attrs = do
+    let proxy = undefined :: a
+    vbo <- bufferVertexData attrs
+    bindVertexAttribute proxy vbo location
+    return vbo
+
+  bufferVertexData :: forall a. (Storable a) => Vector a -> IO GL.BufferObject
+  bufferVertexData attrs = do
+    let sv = V.convert attrs
     vbo <- GL.genObjectName
     GL.bindBuffer GL.ArrayBuffer $= Just vbo
-    SV.unsafeWith (V.convert attrs) $ \ptr -> do
-      let size = fromIntegral . (* sizeOf (undefined :: a))
-                   . (* components) . length $ attrs
+    SV.unsafeWith sv $ \ptr -> do
+      let size = fromIntegral . (* SV.length sv) . sizeOf $ (undefined :: a)
       GL.bufferData GL.ArrayBuffer $= (size, ptr, GL.StaticDraw)
-    let attrLoc = GL.AttribLocation . fromIntegral $ location
+    GL.bindBuffer GL.ArrayBuffer $= Nothing
+    return vbo
+
+  -- Binds vertex attributes for the buffer of type `a` to the currently bound
+  -- VAO
+  bindVertexAttribute :: (VertexAttribute a)
+    => a
+    -> GL.BufferObject
+    -> Int
+    -> IO ()
+  bindVertexAttribute proxy vbo locationIndex = do
+    GL.bindBuffer GL.ArrayBuffer $= Just vbo
+    let attrLoc = GL.AttribLocation . fromIntegral $ locationIndex
     GL.vertexAttribPointer attrLoc $=
-      (integerHandling (Proxy :: Proxy a),
+      (integerHandling proxy,
        GL.VertexArrayDescriptor
-         (fromIntegral components)
-         (glDataType (Proxy :: Proxy a))
-         0 -- stride=0, only one attribute per buffer
+         (fromIntegral . attributeComponents $ proxy)
+         (glDataType proxy)
+         0 -- One attribute per VBO
          nullPtr
       )
     GL.vertexAttribArray attrLoc $= GL.Enabled
-    return vbo
+    GL.bindBuffer GL.ArrayBuffer $= Nothing
 
 class VertexAttribute a where
-  integerHandling :: Proxy a -> GL.IntegerHandling
-  glDataType :: Proxy a -> GL.DataType
+  attributeComponents :: a -> Int
+  integerHandling :: a -> GL.IntegerHandling
+  glDataType :: a -> GL.DataType
 
-instance VertexAttribute a => VertexAttribute (V2 a) where
-  integerHandling _ = integerHandling (Proxy :: Proxy a)
-  glDataType _ = glDataType (Proxy :: Proxy a)
+instance (VertexAttribute a) => VertexAttribute (V2 a) where
+  attributeComponents _ = 2
+  integerHandling _ = integerHandling (undefined :: a)
+  glDataType _ = glDataType (undefined :: a)
 
-instance VertexAttribute a => VertexAttribute (V3 a) where
-  integerHandling _ = integerHandling (Proxy :: Proxy a)
-  glDataType _ = glDataType (Proxy :: Proxy a)
+instance (VertexAttribute a) => VertexAttribute (V3 a) where
+  attributeComponents _ = 3
+  integerHandling _ = integerHandling (undefined:: a)
+  glDataType _ = glDataType (undefined:: a)
 
-instance VertexAttribute a => VertexAttribute (V4 a) where
-  integerHandling _ = integerHandling (Proxy :: Proxy a)
-  glDataType _ = glDataType (Proxy :: Proxy a)
+instance (VertexAttribute a) => VertexAttribute (V4 a) where
+  attributeComponents _ = 4
+  integerHandling _ = integerHandling (undefined :: a)
+  glDataType _ = glDataType (undefined :: a)
 
 instance VertexAttribute Float where
+  attributeComponents _ = 1
   integerHandling _ = GL.ToFloat
   glDataType _ = GL.Float
 
 instance VertexAttribute Word16 where
+  attributeComponents _ = 1
   integerHandling _ = GL.KeepIntegral
   glDataType _ = GL.UnsignedShort
 

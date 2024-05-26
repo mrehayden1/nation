@@ -7,10 +7,12 @@ module App.Render.Model (
   Material(..),
   G.MaterialAlphaMode(..),
 
-  makeGlobalTransforms,
-  makeGlobalTransforms',
+  Animation,
+  AnimationName,
+  AnimationTime,
+  AnimationDuration,
 
-  makeJointMatrices
+  makeTransformationMatrices
 ) where
 
 import Control.Applicative
@@ -30,13 +32,13 @@ import App.Matrix
 import App.Render.Model.Model
 import App.Render.Model.GLTF
 
-type Animation = (Text, Float, Float) -- Animation name, duration and time
+type Animation = (AnimationName, AnimationDuration, AnimationTime)
+type AnimationName = Text
+type AnimationTime = Float
+type AnimationDuration = Float
 
-makeGlobalTransforms :: Model -> Maybe Animation -> Vector (M44 Float)
-makeGlobalTransforms = makeGlobalTransforms' False
-
-makeGlobalTransforms' :: Bool -> Model -> Maybe Animation -> Vector (M44 Float)
-makeGlobalTransforms' translateOnly model anim =
+makeTransformationMatrices :: Model -> Maybe Animation -> Vector (M44 Float)
+makeTransformationMatrices model anim =
   let Model{..} = model
   in ((modelNodes $> identity) V.//)
        . concatMap (globalTransforms' modelNodes identity)
@@ -58,8 +60,8 @@ makeGlobalTransforms' translateOnly model anim =
       let s = scale nodeScale
           r = nodeRotation
           t = nodeTranslation
-          tr = mkTransformation r t
-      in if translateOnly then translate t else tr !*! s
+          tr = transformation r t
+      in tr !*! s
 
 nodeApplyAnimation :: Maybe Animation -> Node -> Node
 nodeApplyAnimation anim n@Node{..} = fromMaybe n $ do
@@ -194,9 +196,3 @@ nodeApplyAnimation anim n@Node{..} = fromMaybe n $ do
           (a3, as3) <- V.uncons as2
           return ((a1, a2, a3), as3)
         else Nothing
-
-makeJointMatrices :: Vector (M44 Float) -> Skin -> Vector (M44 Float)
-makeJointMatrices globalTransforms skin =
-  let ts       = fmap (globalTransforms V.!) . skinJoints $ skin
-      invBinds = skinInverseBindMatrices skin
-  in V.zipWith (!*!) ts invBinds

@@ -29,7 +29,6 @@ peasantMaxSpeed = 2
 
 peasants :: Dynamic t [Coin] -> App t (Dynamic t [Peasant])
 peasants coins = do
-  Entities{..} <- asks envEntities
   time <- asks envTime
   deltaT <- asks (fmap inputDeltaT . envInputE)
   rec
@@ -41,8 +40,8 @@ peasants coins = do
     position <- foldDyn (+) startPosition
                   . attachPromptlyDynWith (^*) velocity
                   $ deltaT
-    let coinsVisible = findVisibleCoins entitiesCoin entitiesPeasant <$> coins
-                         <*> time <*> direction <*> position
+    let coinsVisible = findVisibleCoins <$> coins <*> time <*> direction
+                         <*> position
   return . fmap (:[]) $ Peasant <$> direction <*> position <*> velocity
 
  where
@@ -56,18 +55,16 @@ peasants coins = do
    where
     epsilon = 0.01
 
-  findVisibleCoins :: CoinE
-    -> PeasantE
-    -> [Coin]
+  findVisibleCoins :: [Coin]
     -> Float
     -> V3 Float
     -> V3 Float
     -> [Coin]
-  findVisibleCoins coinEntity peasantEntity cs time direction position =
+  findVisibleCoins cs time direction position =
     sortBy (compare `on` (distance position . coinPosition))
       . filter shouldCollect $ cs
    where
-    collision = makeCollision peasantEntity position direction
+    peasantCollision' = transformPeasantCollision position direction
 
     shouldCollect = liftA2
       (&&)
@@ -77,13 +74,12 @@ peasants coins = do
     coinCollided :: Coin -> Bool
     coinCollided Coin{..} =
       let V3 x _ z = coinPosition
-          coinCollision' = coinECollision coinEntity
-      in collided collision . flip transformCollision coinCollision'
+      in collided peasantCollision' . flip transformCollision coinCollision
           . translate2D $ V2 x z
 
-  makeCollision peasantE pos dir =
+  transformPeasantCollision pos dir =
     let transform = translate2D (V2 px pz) !*! rotate2D rot
         (V3 px _ pz) = pos
         (V3 dx _ dz) = dir
         rot = atan (dz/dx)
-    in transformCollision transform . peasantECoinVision $ peasantE
+    in transformCollision transform peasantCoinVision

@@ -24,22 +24,21 @@ coins :: forall t. Event t ()
   -> Dynamic t (V3 Float)
   -> App t (Dynamic t [Coin], Dynamic t Int)
 coins rClickE playerPosition playerDirection = do
-  Entities{..} <- asks envEntities
   time <- asks envTime
   rec
-    let playerCollision = liftA2 (makePlayerCollision entitiesPlayer)
+    let pickupCollision = liftA2 transformPlayerCollision
                                  playerPosition
                                  playerDirection
         coinsCollectedE =
-          attachWith (uncurry $ findCollectedCoinsI entitiesCoin)
+          attachWith (uncurry findCollectedCoinsI)
                      (current $ (,) <$> looseCoins <*> time)
-            . updated $ playerCollision
+            . updated $ pickupCollision
         coinsDroppedE =
           fmap ((,) <$> thd3 <*> snd3)
             . ffilter ((> 0) . fst3)
             . tag (current $ (,,) <$> playerCoins <*> playerPosition <*> time)
             $ rClickE
-    (looseCoins :: Dynamic t [Coin]) <- foldDyn ($) initialCoins
+    looseCoins :: Dynamic t [Coin] <- foldDyn ($) initialCoins
       . mergeWith (.) $ [
           fmap removeIxs coinsCollectedE,
           fmap (uncurry addCoin) coinsDroppedE
@@ -48,10 +47,7 @@ coins rClickE playerPosition playerDirection = do
         (+) . length <$> coinsCollectedE,
         subtract 1   <$  coinsDroppedE
       ]
-  return (
-      looseCoins,
-      playerCoins
-    )
+  return (looseCoins, playerCoins)
  where
   initialCoins :: [Coin]
   initialCoins = fmap (Coin 0) [
@@ -66,23 +62,21 @@ coins rClickE playerPosition playerDirection = do
 
   addCoin = ((:) .) . Coin
 
-  makePlayerCollision playerE pos dir =
+  transformPlayerCollision pos dir =
     let transform' = translate2D (V2 px pz) !*! rotate2D rot
         (V3 px _ pz) = pos
         (V3 dx _ dz) = dir
         rot = atan (dz/dx)
-    in transformCollision transform' . playerECoinPickupCollision $ playerE
+    in transformCollision transform' playerCoinPickupCollision
 
-  findCollectedCoinsI :: CoinE -> [Coin] -> Float -> Collision Float -> [Int]
-  findCollectedCoinsI coinEntity cs time playerCollision =
+  findCollectedCoinsI :: [Coin] -> Float -> Collision Float -> [Int]
+  findCollectedCoinsI cs time pickupCollision =
     fmap fst . filter (shouldCollect . snd) . zip [0..] $ cs
    where
-    shouldCollect = liftA2
-      (&&)
+    shouldCollect = liftA2 (&&)
       ((time >) . (+ coinPlayerCollectCooldown) . coinTimeDropped)
       coinCollided
     coinCollided :: Coin -> Bool
     coinCollided Coin{..} =
-      let coinCollision = coinECollision coinEntity
-      in collided playerCollision . flip transformCollision coinCollision
-           . translate2D . (^. _xz) $ coinPosition
+      collided pickupCollision . flip transformCollision coinCollision
+        . translate2D . (^. _xz) $ coinPosition

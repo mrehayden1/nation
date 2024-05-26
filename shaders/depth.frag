@@ -21,7 +21,7 @@ void main() {
     alpha = baseColorFactor.a;
   }
 
-  // FIXME Alpha cutoff
+  // TODO Alpha coverage
   if (alphaMode == ALPHA_MODE_MASK && alpha < alphaCutoff)
     discard;
 }

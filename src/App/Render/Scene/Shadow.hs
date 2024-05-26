@@ -5,18 +5,23 @@ module App.Render.Scene.Shadow (
 import Control.Lens
 import Control.Monad
 import Control.Monad.Reader
+import Data.Foldable
+import qualified Data.Map as M
+import Data.Maybe
 import Data.StateVar
-import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Foreign.Ptr
+import qualified Data.Vector.Storable as SV
+import Foreign
 import qualified Graphics.Rendering.OpenGL as GL
 import Linear
 
+import App.Entity
 import App.Matrix
 import App.Projection
 import App.Render.Env
 import App.Render.Model
 import App.Render.Pipeline
+import App.Render.Scene.Entity
 import App.Render.Scene.Scene
 import App.Vector
 
@@ -72,92 +77,105 @@ createShadowMapper = do
   renderDepthMap :: GL.FramebufferObject -> Scene -> Render ()
   renderDepthMap frameBuffer Scene{..} = do
     pipeline <- asks envPipeline
-    let Daylight{..} = sceneDaylight
-    liftIO $ bindPipeline pipeline
-    GL.bindFramebuffer GL.Framebuffer $= frameBuffer
-    -- Set projection matrix
     aspectRatio <- asks viewportAspectRatio
-    projection <- liftIO $ toGlMatrix
-      . directionalLightProjection sceneCamera daylightPitch daylightYaw
-      $ aspectRatio
-    pipelineUniform pipeline "projectionM"
-      $= (projection :: GL.GLmatrix GL.GLfloat)
+    let Daylight{..} = sceneDaylight
+    liftIO . bindPipeline $ pipeline
+    -- Bind output to frame buffer
+    GL.bindFramebuffer GL.Framebuffer $= frameBuffer
     -- Set view matrix
     viewMatrix <- liftIO . toGlMatrix
       . directionalLightViewMatrix sceneCamera daylightPitch daylightYaw
       $ aspectRatio
     pipelineUniform pipeline "viewM" $= (viewMatrix :: GL.GLmatrix GL.GLfloat)
+    -- Set projection matrix
+    projection <- liftIO $ toGlMatrix
+      . directionalLightProjection sceneCamera daylightPitch daylightYaw
+      $ aspectRatio
+    pipelineUniform pipeline "projectionM"
+      $= (projection :: GL.GLmatrix GL.GLfloat)
     -- Set viewport to shadow map size
     GL.viewport $= (
         GL.Position 0 0,
         GL.Size shadowMapWidth shadowMapWidth
       )
+    -- Clear depth buffer
     liftIO $ GL.clear [GL.DepthBuffer]
-    mapM_ renderElement sceneElements
-    GL.bindFramebuffer GL.Framebuffer $= GL.defaultFramebufferObject -- unbind
+    mapM_ (uncurry renderInstances) . M.assocs $ sceneEntities
+    -- Unbind framebuffer
+    GL.bindFramebuffer GL.Framebuffer $= GL.defaultFramebufferObject
 
-  renderElement :: Element -> Render ()
-  renderElement Element{..} = do
-    when elementShadow $ do
-      let modelMatrix = mkTransformation elementRotation elementPosition
-          globalTransforms = makeGlobalTransforms elementModel elementAnimation
-          jointMatrices = fmap (makeJointMatrices globalTransforms) modelSkins
-          Model{..} = elementModel
-      V.zipWithM_ (renderNode modelMatrix jointMatrices) globalTransforms
-        modelNodes
+renderInstances :: Entity -> [Instance] -> Render ()
+renderInstances entity instances = do
+  Model{..} <- asks (entityModel entity . envModels)
+  -- Buffer instance model matrices
+  bufferData 0 . SV.fromList . fmap (transpose . instanceModelMatrix)
+    $ instances
+  -- Buffer instance transformation matrices
+  bufferData 1 . SV.convert . V.concat
+    . fmap (fmap transpose . instanceTransformationMatrices) $ instances
+  -- Buffer skin offsets
+  bufferData 2 . SV.convert . fmap (V.length . skinJoints) $ modelSkins
+  -- Buffer instance joint matrices
+  bufferData 3 . SV.convert . V.concat
+    . fmap (fmap transpose . fold . instanceJointMatrices) $ instances
+  GL.bindBuffer GL.ShaderStorageBuffer $= Nothing
+  -- Render meshes
+  shouldRenderMeshes <- asks envRenderMeshes
+  let numInstances = length instances
+      numNodes = V.length modelNodes
+      numJoints = V.length . foldMap skinJoints $ modelSkins
+  when (entityHasShadow entity && shouldRenderMeshes) $
+    imapM_ (renderModelNode numInstances numNodes numJoints) modelNodes
+ where
+  bufferData :: (Storable a) => Int -> SV.Vector a -> Render ()
+  bufferData bindingIndex dat = do
+    buffer <- GL.genObjectName
+    GL.bindBuffer GL.ShaderStorageBuffer $= Just buffer
+    liftIO . SV.unsafeWith dat $ \ptr -> do
+      let size = fromIntegral . (* SV.length dat) . sizeOf
+                   $ (undefined :: ModelMatrix)
+      GL.bufferData GL.ShaderStorageBuffer
+        $= (size, ptr, GL.StaticDraw)
+    (GL.bindBufferBase GL.IndexedShaderStorageBuffer
+      . fromIntegral $ bindingIndex) $= Just buffer
 
-  renderNode :: M44 Float
-    -> Vector (Vector (M44 Float))
-    -> M44 Float
-    -> Node
-    -> Render ()
-  renderNode modelMatrix jointMatricess bindMatrix Node{..} = do
-    let jointMatrices = maybe mempty (jointMatricess V.!) nodeSkin
-    mapM_ (mapM_ (renderMeshPrimitive modelMatrix bindMatrix jointMatrices))
-      nodeMesh
+renderModelNode :: Int -> Int -> Int -> Int -> Node -> Render ()
+renderModelNode numinstances numNodes numJoints nodeId Node{..} = do
+  let skinId = fromMaybe (-1) nodeSkin
+  mapM_ (renderMeshPrimitive numinstances numNodes numJoints nodeId skinId)
+        nodeMesh
 
-  renderMeshPrimitive :: M44 Float
-    -> M44 Float
-    -> Vector (M44 Float)
-    -> MeshPrimitive
-    -> Render ()
-  renderMeshPrimitive modelMatrix' bindMatrix' jointMatrices' meshPrim = do
-    pipeline <- asks envPipeline
-    let Material{..} = meshPrimMaterial meshPrim
-    -- Set base color texture (for alpha testing)
-    pipelineUniform pipeline "baseColorFactor"
-      $= toGlVector4 materialBaseColorFactor
-    --   Whether an base color texture is set
-    pipelineUniform pipeline "hasBaseColorTexture"
-      $= maybe (0 :: GL.GLint) (const 1) materialBaseColorTexture
-    GL.activeTexture $= GL.TextureUnit baseColorTextureUnit
-    GL.textureBinding GL.Texture2D $= materialBaseColorTexture
-    -- Alpha
-    pipelineUniform pipeline "alphaCutoff" $= materialAlphaCutoff
-    pipelineUniform pipeline "alphaMode"
-      $= (fromIntegral . fromEnum $ materialAlphaMode :: GL.GLint)
-    -- Set model matrix
-    modelMatrix <- liftIO $ toGlMatrix modelMatrix'
-    pipelineUniform pipeline "modelM"
-      $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
-    -- Set bind matrix
-    bindMatrix <- liftIO $ toGlMatrix bindMatrix'
-    pipelineUniform pipeline "bindM"
-      $= (bindMatrix :: GL.GLmatrix GL.GLfloat)
-    -- Set skinned uniform
-    let skinned = not . null $ jointMatrices'
-    pipelineUniform pipeline "skinned"
-      $= (fromIntegral . fromEnum $ skinned :: GL.GLint)
-    -- Set joint matrices
-    liftIO $ pipelineUniformMatrix4v pipeline "jointM" jointMatrices'
-    -- Draw
-    GL.bindVertexArrayObject $= (Just . meshPrimVao $ meshPrim)
-    liftIO $ GL.drawElements (meshPrimGlMode meshPrim)
-                             (meshPrimNumIndices meshPrim)
-                             GL.UnsignedInt
-                             nullPtr
-    GL.bindVertexArrayObject $= Nothing
-    -- Unbind
-    GL.bindVertexArrayObject $= Nothing
-    GL.activeTexture $= GL.TextureUnit baseColorTextureUnit
-    GL.textureBinding GL.Texture2D $= Nothing
+renderMeshPrimitive :: Int -> Int -> Int -> Int -> Int -> MeshPrimitive -> Render ()
+renderMeshPrimitive numInstances numNodes numJoints nodeId skinId meshPrim = do
+  pipeline <- asks envPipeline
+  let Material{..} = meshPrimMaterial meshPrim
+  -- Number of model nodes + node id of mesh (for offset calculations)
+  pipelineUniform pipeline "numNodes" $= (fromIntegral numNodes :: GL.GLint)
+  pipelineUniform pipeline "nodeId" $= (fromIntegral nodeId :: GL.GLint)
+  -- Skin ID and number of joints in model
+  pipelineUniform pipeline "skinId" $= (fromIntegral skinId :: GL.GLint)
+  pipelineUniform pipeline "numJoints" $= (fromIntegral numJoints :: GL.GLint)
+  -- Set base color texture (for alpha testing)
+  pipelineUniform pipeline "baseColorFactor"
+    $= toGlVector4 materialBaseColorFactor
+  --   Whether an base color texture is set
+  pipelineUniform pipeline "hasBaseColorTexture"
+    $= maybe (0 :: GL.GLint) (const 1) materialBaseColorTexture
+  GL.activeTexture $= GL.TextureUnit baseColorTextureUnit
+  GL.textureBinding GL.Texture2D $= materialBaseColorTexture
+  -- Alpha
+  pipelineUniform pipeline "alphaCutoff" $= materialAlphaCutoff
+  pipelineUniform pipeline "alphaMode"
+    $= (fromIntegral . fromEnum $ materialAlphaMode :: GL.GLint)
+  -- Draw
+  GL.bindVertexArrayObject $= (Just . meshPrimVao $ meshPrim)
+  liftIO $ GL.drawElementsInstanced (meshPrimGlMode meshPrim)
+                                    (meshPrimNumIndices meshPrim)
+                                    GL.UnsignedInt
+                                    nullPtr
+                                    (fromIntegral numInstances)
+  GL.bindVertexArrayObject $= Nothing
+  -- Unbind
+  GL.bindVertexArrayObject $= Nothing
+  GL.activeTexture $= GL.TextureUnit baseColorTextureUnit
+  GL.textureBinding GL.Texture2D $= Nothing

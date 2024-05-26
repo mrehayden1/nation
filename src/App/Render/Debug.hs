@@ -85,14 +85,14 @@ createDebugGizmoOverlayer = do
     pipelineUniform pipeline "projectionM"
       $= (projection :: GL.GLmatrix GL.GLfloat)
     liftIO . GL.clear $ [GL.DepthBuffer]
-    let globalTransforms = makeGlobalTransforms model Nothing
+    let globalTransforms = makeTransformationMatrices model Nothing
     V.zipWithM_ renderNode (modelNodes model) globalTransforms
     liftIO unbindPipeline
     return ()
  where
   renderNode :: Node -> M44 Float -> Render ()
-  renderNode Node{..} bindMatrix = do
-    mapM_ (mapM_ (renderMeshPrimitive bindMatrix)) nodeMesh
+  renderNode Node{..} bindMatrix =
+    mapM_ (renderMeshPrimitive bindMatrix) nodeMesh
 
   renderMeshPrimitive :: M44 Float -> MeshPrimitive -> Render ()
   renderMeshPrimitive bindMatrix' meshPrim = do

@@ -1,4 +1,5 @@
 module App.Matrix (
+  transformation,
   scale,
   scale2D,
   translate,
@@ -14,6 +15,9 @@ module App.Matrix (
 import Data.Foldable
 import qualified Graphics.Rendering.OpenGL as GL
 import Linear
+
+transformation :: Num a => Quaternion a -> V3 a -> M44 a
+transformation = mkTransformation
 
 scale :: Num a => V3 a -> M44 a
 scale (V3 x y z) =

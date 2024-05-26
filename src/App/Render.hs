@@ -4,9 +4,15 @@ module App.Render (
   createRenderer
 ) where
 
+import Control.Applicative
 import Control.Monad
+import Control.Parallel.Strategies
 import Data.IORef
+import qualified Data.Map as M
+import Data.Maybe
 import Data.Time.Clock.POSIX
+import Data.Vector (Vector)
+import qualified Data.Vector as V
 import Linear
 
 import App.Entity
@@ -14,18 +20,20 @@ import App.Entity.Collision3D
 import App.Game hiding (Env)
 import App.Map
 import App.Matrix
-import App.Quaternion as Q
+import App.Projection
+import qualified App.Quaternion as Q
 import App.Render.Debug
 import App.Render.Env
+import App.Render.Model
 import App.Render.Scene as Scene
+import App.Render.Scene.Entity
 import App.Render.Scene.Shadow
 import App.Render.UI
 import App.Vector
 
 createRenderer :: IORef POSIXTime
-                    -> Entities
                     -> IO (Frame -> Render ())
-createRenderer timeRef entities = do
+createRenderer timeRef = do
   (shadowMapTexture, renderShadowMap) <- createShadowMapper
   renderScene <- createSceneRenderer shadowMapTexture
   renderUi <- createUiRenderer
@@ -37,7 +45,7 @@ createRenderer timeRef entities = do
   -- React to changes in our Reflex application
   return $ \frame@(_, Output{..}) -> do
     let World{..} = outputWorld
-    scene <- cullScene . makeScene entities $ frame
+    scene <- cullScene =<< makeScene frame
     renderShadowMap scene
     renderScene scene
     renderUi frame
@@ -47,98 +55,126 @@ createRenderer timeRef entities = do
       unless outputDebugQuadOverlay . overlayGizmo $ worldCamera
     when outputConsoleOpen $ overlayConsole frame
 
-makeScene :: Entities -> Frame -> Scene
-makeScene Entities{..} (_, Output{..}) =
+makeScene :: Frame -> Render Scene
+makeScene (_, Output{..}) = do
   let World{..} = outputWorld
       App.Game.Daylight{..} = worldDaylight
-      trees = fmap (makeTree entitiesOakTree) outputTrees
-      peasants = fmap (makePeasant entitiesPeasant worldAnimationTime) worldPeasants
-      coins = fmap (makeCoin entitiesCoin worldAnimationTime) worldCoins
-  in Scene {
-       sceneCamera = worldCamera,
-       sceneElements = concat [
-         -- Grass
-         [
-           Element {
-             elementAnimation = Nothing,
-             elementCullingBounds = Nothing,
-             elementModel = grassEModel entitiesGrass,
-             elementPosition = 0,
-             elementRotation = Q.identity,
-             elementShadow = True
-           }
-         ],
-         trees,
-         -- Pointer
-         [
-           Element {
-             elementAnimation = Just ("spin", 5, worldAnimationTime),
-             elementCullingBounds = Nothing,
-             elementModel = pointerEModel entitiesPointer,
-             elementPosition = worldPointerPosition,
-             elementRotation = Q.identity,
-             elementShadow = False
-           }
-         ],
-         peasants,
-         coins,
-         -- Horse
-         [
-           Element {
-             elementAnimation = if quadrance worldPlayerVelocity > 0
-               then Just ("Gallop", 0.67, worldAnimationTime)
-               else Just ("Idle2" , 6   , worldAnimationTime),
-             elementCullingBounds = Nothing,
-             elementModel = playerEModel entitiesPlayer,
-             elementPosition = worldPlayerPosition,
-             elementRotation = Q.fromVectors (V3 1 0 0) worldPlayerDirection,
-             elementShadow = True
-           }
-         ]
-       ],
-       sceneDaylight = Scene.Daylight {
-         daylightColor = daylightColor,
-         daylightIntensity = daylightIntensity,
-         daylightPitch = daylightPitch,
-         daylightYaw = daylightYaw
-       }
+  treeInstances <- mapM treeInstance outputTrees
+  peasantInstances <- mapM (peasantInstance worldAnimationTime) worldPeasants
+  coinInstances <- mapM (coinInstance worldAnimationTime) worldCoins
+  playerInstances <- fmap pure
+    . playerInstance worldAnimationTime worldPlayerVelocity
+                     worldPlayerDirection
+    $ worldPlayerPosition
+  grassModel <- asks (entityModel EntityGrass . envModels)
+  pointerModel <- asks (entityModel EntityPointer . envModels)
+  return $ Scene {
+    sceneCamera = worldCamera,
+    sceneDaylight = Scene.Daylight {
+      daylightColor = daylightColor,
+      daylightIntensity = daylightIntensity,
+      daylightPitch = daylightPitch,
+      daylightYaw = daylightYaw
+    },
+    sceneEntities = M.fromList [
+      -- Grass
+      (EntityGrass, [makeInstance grassModel Q.identity 0 Nothing]),
+      -- Trees
+      (EntityOakTree, treeInstances),
+      -- Pointer
+      (EntityPointer, [
+        makeInstance pointerModel Q.identity worldPointerPosition
+          . Just $ ("spin", 5, worldAnimationTime)
+      ]),
+      -- Peasants
+      (EntityPeasant, peasantInstances),
+      -- Coins
+      (EntityCoin, coinInstances),
+      -- Player
+      (EntityPlayer, playerInstances)
+    ]
+  }
+
+playerInstance :: Float -> V3 Float -> V3 Float -> V3 Float -> Render Instance
+playerInstance t v d p = do
+  let animation =
+        if quadrance v > 0
+          then Just ("Gallop", 0.67, t)
+          else Just ("Idle2" , 6   , t)
+      r = Q.fromVectors (V3 1 0 0) d
+  model <- asks (entityModel EntityPlayer . envModels)
+  return . makeInstance model r p $ animation
+
+coinInstance :: Float -> Coin -> Render Instance
+coinInstance t (Coin _ p) = do
+  model <- asks (entityModel EntityCoin . envModels)
+  return . makeInstance model Q.identity p . Just $ ("Spin", 2.08, t)
+
+peasantInstance :: Float -> Peasant -> Render Instance
+peasantInstance t (Peasant d p v) = do
+  let animation =
+        if quadrance v > 0
+          then Just ("Walk"     , 0.66, t)
+          else Just ("Idle Long", 4   , t)
+      rotation = Q.fromVectors (V3 1 0 0) d
+  model <- asks (entityModel EntityPeasant . envModels)
+  return . makeInstance model rotation p $ animation
+
+treeInstance :: MapTree -> Render Instance
+treeInstance MapTree{..} = do
+  let V2 x z = mapTreePosition
+      p = V3 x 0 z
+      rotation = Q.fromVectors (V3 1 0 0) . eulerDirection 0 $ mapTreeRotation
+  model <- asks (entityModel EntityOakTree . envModels)
+  return . makeInstance model rotation p $ Nothing
+
+makeInstance :: Model -> Quaternion Float -> V3 Float -> Maybe Animation -> Instance
+makeInstance model@Model{..} rotation translation' animation =
+  let modelMatrix = transformation rotation translation'
+      transformationMatrices = makeTransformationMatrices model animation
+      jointMatrices = fmap (makeJointMatrices transformationMatrices) modelSkins
+  in Instance {
+       instanceModelMatrix = modelMatrix,
+       instanceTransformationMatrices = transformationMatrices,
+       instanceJointMatrices = jointMatrices
      }
  where
-  makeCoin :: CoinE -> Float -> Coin -> Element
-  makeCoin coinE t (Coin _ p) =
-    Element {
-      elementAnimation = Just ("Spin", 2.08, t),
-      elementCullingBounds = Nothing,
-      elementModel = coinEModel coinE,
-      elementPosition = p,
-      elementRotation = Q.identity,
-      elementShadow = True
-    }
+  -- The renderer expects a joint matrix for every node regardless of wether it
+  -- has skinned meshes or not, so make joint matrices for each node if it has a skin, otherwise default to
+  -- identity
+  makeJointMatrices :: Vector (M44 Float) -> Skin -> Vector (M44 Float)
+  makeJointMatrices globalTransforms skin =
+    let ts       = fmap (globalTransforms V.!) . skinJoints $ skin
+        invBinds = skinInverseBindMatrices skin
+    in V.zipWith (!*!) ts invBinds
 
-  makePeasant :: PeasantE -> Float -> Peasant -> Element
-  makePeasant peasantE t (Peasant d p v) =
-    Element {
-      elementAnimation = if quadrance v > 0
-        then Just ("Walk"     , 0.66, t)
-        else Just ("Idle Long", 4   , t),
-      elementCullingBounds = Nothing,
-      elementModel = peasantEModel peasantE,
-      elementPosition = p,
-      elementRotation = Q.fromVectors (V3 1 0 0) d,
-      elementShadow = True
-    }
+-- Cull entities in the scene by the camera frustum and their frustum culling
+-- volume, if defined.
+cullScene :: Scene -> Render Scene
+cullScene scene@Scene{..} = do
+  aspectRatio <- asks viewportAspectRatio
+  let frustum' = frustumCollision . cameraFrustum aspectRatio $ sceneCamera
+      culledEntities = M.mapWithKey (cullInstances frustum') sceneEntities
+      scene' = scene { sceneEntities = culledEntities }
+  return scene'
+ where
+  frustumCollision :: (Epsilon a, Floating a) => Frustum a -> Collision3D a
+  frustumCollision =
+    liftA2 CollisionPolyhedron frustumPoints frustumFaceNormals
 
-  makeTree :: OakTreeE -> MapTree -> Element
-  makeTree oakTreeE MapTree{..} =
-    let V2 x z = mapTreePosition
-        p = V3 x 0 z
-    in Element {
-        elementAnimation = Nothing,
-        elementCullingBounds = Just . transformCollision3d (translate p)
-          . oakTreeECullingBounds $ oakTreeE,
-        elementModel = oakTreeEModel oakTreeE,
-        elementPosition = p,
-        elementRotation = Q.fromVectors (V3 1 0 0) . eulerDirection 0
-          $ mapTreeRotation,
-        elementShadow = True
-      }
+  cullInstances :: Collision3D Float
+    -> Entity
+    -> [Instance]
+    -> [Instance]
+  cullInstances frustum' entity = parFilter shouldRender
+   where
+    shouldRender :: Instance -> Bool
+    shouldRender Instance{..} =
+      maybe True
+            (collided3d frustum' . transformCollision3d instanceModelMatrix)
+        . entityCullingBounds $ entity
+
+  parFilter :: (a -> Bool) -> [a] -> [a]
+  parFilter f = catMaybes . runEval . parListChunk 200 rseq . map f'
+   where
+    f' a = if f a then Just a else Nothing

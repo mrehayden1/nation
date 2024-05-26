@@ -53,6 +53,7 @@ library
       App.Render.Model.Model
       App.Render.Pipeline
       App.Render.Scene
+      App.Render.Scene.Entity
       App.Render.Scene.Scene
       App.Render.Scene.Shadow
       App.Render.Shaders

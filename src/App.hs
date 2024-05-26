@@ -13,12 +13,12 @@ import Reflex.GLFW.Simple
 import Reflex.Host.Headless
 import Reflex.Network
 
-import App.Entity
 import App.Env
 import App.Game
 import App.Map
 import App.Render
 import App.Render.Model
+import App.Render.Scene.Entity
 import App.Window
 
 appName :: String
@@ -26,9 +26,11 @@ appName = "Nation"
 
 createRenderEnv :: IO App.Render.Env
 createRenderEnv = do
+  models <- loadModels
   jointModel <- fromGlbFile "assets/models/joint.glb"
   return $ App.Render.Env {
     envJointModel = jointModel,
+    envModels = models,
     envPipeline = undefined, --- FIXME yucky
     envRenderMeshes = True,
     envShowJoints = False,
@@ -44,10 +46,8 @@ start = do
   bracket (initWindow appName) closeWindow $ \win -> do
     -- Used to get the time the frame was last refreshed
     timeRef <- newIORef 0
-    -- Create graphics elements
-    entities <- loadEntities
     -- Create renderer
-    renderFrame <- createRenderer timeRef entities
+    renderFrame <- createRenderer timeRef
     renderEnv <- createRenderEnv
     -- Enter game loop
     runHeadlessApp $ do
@@ -75,7 +75,6 @@ start = do
               . leftmost $ [(0, 0) <$ ePostBuild, tickE]
       time <- holdDyn 0 . fmap inputTime $ inputE
       let appEnv = App.Env.Env {
-            envEntities = entities,
             envInputE = inputE,
             envTime = time,
             envWindowHeight = windowHeight,

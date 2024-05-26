@@ -34,7 +34,7 @@ fromGlbFile pathname = do
   let materials = fmap (M.adaptMaterial textures) gltfMaterials
   meshes <- mapM (mapM (loadMeshPrimitive materials) . G.meshPrimitives)
               gltfMeshes
-  let nodes = makeNodes gltfNodes gltfAnimations gltfSkins meshes
+  let nodes = makeNodes gltfNodes gltfAnimations meshes
       -- FIXME Because we don't have a top level `scene` property yet, default
       -- to the first scene in the list.
       scene = G.sceneNodes . V.head $ gltfScenes
@@ -47,15 +47,11 @@ fromGlbFile pathname = do
   -- properties.
   makeNodes :: Vector G.Node
     -> Vector G.Animation
-    -> Vector Skin
     -> Vector Mesh
     -> Vector Node
-  makeNodes nodes animations skins meshes =
+  makeNodes nodes animations meshes =
     V.imap makeSceneNode nodes
    where
-    jointNodes :: Vector Int
-    jointNodes = foldl' (flip $ (V.++) . skinJoints) mempty skins
-
     animMap :: Map Text (Map Int [G.Channel])
     animMap = indexAnimations . toList $ animations
 
@@ -63,14 +59,12 @@ fromGlbFile pathname = do
     makeSceneNode i node =
       let anims = M.mapMaybe (M.lookup i) animMap
           children = G.nodeChildren node
-          mesh = fmap (meshes !) . G.nodeMeshId $ node
+          mesh = maybe mempty (meshes !) . G.nodeMeshId $ node
           rot = fromMaybe (Quaternion 1 0) . G.nodeRotation $ node
           scale = fromMaybe 1 . G.nodeScale $ node
           skin = G.nodeSkin node
           trans = fromMaybe 0 . G.nodeTranslation $ node
-          isJoint = V.elem i jointNodes
-          --inverseBind = inv44 $ mkTransformation r t !*! scale s
-      in Node anims children isJoint mesh rot scale skin trans
+      in Node anims children mesh rot scale skin trans
 
   indexAnimations :: [G.Animation] -> Map Text (Map Int [G.Channel])
   indexAnimations = M.fromList . fmap ((,) <$> animationName <*> indexChannels)

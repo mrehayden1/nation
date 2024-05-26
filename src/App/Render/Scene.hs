@@ -1,28 +1,30 @@
 module App.Render.Scene (
   module App.Render.Scene.Scene,
 
-  createSceneRenderer,
-  cullScene
+  createSceneRenderer
 ) where
 
-import Control.Applicative
 import Control.Lens
 import Control.Monad
 import Control.Monad.Reader
+import Data.Foldable
+import qualified Data.Map as M
+import Data.Maybe
 import Data.StateVar
-import Data.Vector (Vector)
 import qualified Data.Vector as V
+import qualified Data.Vector.Storable as SV
 import Foreign
 import qualified Graphics.Rendering.OpenGL as GL
 import Linear
 
 import App.Camera as Cam
-import App.Entity.Collision3D
+import App.Entity
 import App.Matrix
 import App.Projection
 import App.Render.Env
 import App.Render.Model
 import App.Render.Pipeline
+import App.Render.Scene.Entity
 import App.Render.Scene.Scene
 import App.Vector
 
@@ -85,127 +87,105 @@ createSceneRenderer shadowDepthMap = do
     -- Render
     width <- asks (fromIntegral . envViewportWidth)
     height <- asks (fromIntegral . envViewportHeight)
+    -- Set viewport
     GL.viewport $= (GL.Position 0 0, GL.Size width height)
+    -- Clear buffers
     liftIO . GL.clear $ [GL.ColorBuffer, GL.DepthBuffer]
-    mapM_ renderElement sceneElements
+    mapM_ (uncurry renderInstances) . M.assocs $ sceneEntities
     -- Unbind textures
     GL.activeTexture $= GL.TextureUnit shadowMapTextureUnit
     GL.textureBinding GL.Texture2D $= Nothing
 
-  renderElement :: Element -> Render ()
-  renderElement Element{..} = do
-    -- Render meshes
-    let modelMatrix = mkTransformation elementRotation elementPosition
-        nodeTransforms = makeGlobalTransforms elementModel elementAnimation
-        -- Indexed by skin
-        jointMatrices = fmap (makeJointMatrices nodeTransforms) . modelSkins $ elementModel
-    shouldRenderMeshes <- asks envRenderMeshes
-    when shouldRenderMeshes $
-      V.zipWithM_ (renderModelNode modelMatrix jointMatrices) nodeTransforms
-        . modelNodes $ elementModel
-    -- Render joints
-    showJoints <- asks envShowJoints
-    -- Extract the translation from the model matrix
-    when showJoints
-      . V.zipWithM_ (renderJointNode modelMatrix) nodeTransforms
-      . modelNodes $ elementModel
-
-  renderModelNode :: M44 Float
-    -> Vector (Vector (M44 Float))
-    -> M44 Float
-    -> Node
-    -> Render ()
-  renderModelNode modelMatrix jointMatricess bindMatrix Node{..} = do
-    let jointMatrices = maybe mempty (jointMatricess V.!) nodeSkin
-    mapM_ (mapM_ (renderMeshPrimitive modelMatrix bindMatrix jointMatrices))
-      nodeMesh
-
-  renderJointNode :: M44 Float -> M44 Float -> Node -> Render ()
-  renderJointNode modelMatrix bindMatrix Node{..} = do
-    when nodeIsJoint $ do
-      jointModel <- asks envJointModel
-      -- Render the joint model at the origin of the joint.
-      let modelMatrix' = translate . (^. _xyz)
-            $ modelMatrix !*! bindMatrix !* V4 0 0 0 1
-          nodeTransforms = makeGlobalTransforms jointModel Nothing
-      V.zipWithM_ (renderModelNode modelMatrix' mempty)
-          nodeTransforms
-        . modelNodes $ jointModel
-
-  renderMeshPrimitive :: M44 Float
-    -> M44 Float
-    -> Vector (M44 Float)
-    -> MeshPrimitive
-    -> Render ()
-  renderMeshPrimitive modelMatrix' bindMatrix' jointMatrices' meshPrim = do
-    pipeline <- asks envPipeline
-    let Material{..} = meshPrimMaterial meshPrim
-    -- Base color
-    pipelineUniform pipeline "baseColorFactor"
-      $= toGlVector4 materialBaseColorFactor
-    pipelineUniform pipeline "hasBaseColorTexture"
-      $= maybe (0 :: GL.GLint) (const 1) materialBaseColorTexture
-    GL.activeTexture $= GL.TextureUnit baseColorTextureUnit
-    GL.textureBinding GL.Texture2D $= materialBaseColorTexture
-    -- Metallic/roughness
-    pipelineUniform pipeline "metallicFactor" $= materialMetallicFactor
-    pipelineUniform pipeline "roughnessFactor" $= materialRoughnessFactor
-    pipelineUniform pipeline "hasMetallicRoughnessTexture"
-      $= maybe (0 :: GL.GLint) (const 1) materialMetallicRoughnessTexture
-    GL.activeTexture $= GL.TextureUnit metallicRoughnessTextureUnit
-    GL.textureBinding GL.Texture2D $= materialMetallicRoughnessTexture
-    -- Normal mapping
-    pipelineUniform pipeline "normalTextureScale" $= materialNormalTextureScale
-    pipelineUniform pipeline "hasNormalTexture"
-      $= maybe (0 :: GL.GLint) (const 1) materialNormalTexture
-    GL.activeTexture $= GL.TextureUnit normalTextureUnit
-    GL.textureBinding GL.Texture2D $= materialNormalTexture
-    -- Alpha coverage
-    pipelineUniform pipeline "alphaCutoff" $= materialAlphaCutoff
-    pipelineUniform pipeline "alphaMode"
-      $= (fromIntegral . fromEnum $ materialAlphaMode :: GL.GLint)
-    -- Double-sidedness
-    pipelineUniform pipeline "doubleSided"
-      $= (fromIntegral . fromEnum $ materialDoubleSided :: GL.GLint)
-    -- Set model matrix
-    modelMatrix <- liftIO $ toGlMatrix modelMatrix'
-    pipelineUniform pipeline "modelM"
-      $= (modelMatrix :: GL.GLmatrix GL.GLfloat)
-    -- Set bind matrix
-    bindMatrix <- liftIO $ toGlMatrix bindMatrix'
-    pipelineUniform pipeline "bindM"
-      $= (bindMatrix :: GL.GLmatrix GL.GLfloat)
-    -- Set skinned uniform
-    let skinned = not . null $ jointMatrices'
-    pipelineUniform pipeline "skinned"
-      $= (fromIntegral . fromEnum $ skinned :: GL.GLint)
-    -- Set joint matrices
-    liftIO $ pipelineUniformMatrix4v pipeline "jointM" jointMatrices'
-    -- Draw
-    GL.bindVertexArrayObject $= (Just . meshPrimVao $ meshPrim)
-    liftIO $ GL.drawElements (meshPrimGlMode meshPrim)
-                             (meshPrimNumIndices meshPrim)
-                             GL.UnsignedInt
-                             nullPtr
-    -- Unbind
-    GL.bindVertexArrayObject $= Nothing
-    GL.activeTexture $= GL.TextureUnit baseColorTextureUnit
-    GL.textureBinding GL.Texture2D $= Nothing
-    GL.activeTexture $= GL.TextureUnit metallicRoughnessTextureUnit
-    GL.textureBinding GL.Texture2D $= Nothing
-    GL.activeTexture $= GL.TextureUnit normalTextureUnit
-    GL.textureBinding GL.Texture2D $= Nothing
-
-cullScene :: Scene -> Render Scene
-cullScene scene@Scene{..} = do
-  aspectRatio <- asks viewportAspectRatio
-  let collision = frustumCollision . cameraFrustum aspectRatio $ sceneCamera
-      culledElements =
-        filter (maybe True (collided3d collision) . elementCullingBounds)
-               sceneElements
-      scene' = scene { sceneElements = culledElements }
-  return scene'
+renderInstances :: Entity -> [Instance] -> Render ()
+renderInstances entity instances = do
+  Model{..} <- asks (entityModel entity . envModels)
+  -- Buffer instance model matrices
+  bufferData 0 . SV.fromList . fmap (transpose . instanceModelMatrix)
+    $ instances
+  -- Buffer instance transformation matrices
+  bufferData 1 . SV.convert . V.concat
+    . fmap (fmap transpose . instanceTransformationMatrices) $ instances
+  -- Buffer skin offsets
+  bufferData 2 . SV.convert . fmap (V.length . skinJoints) $ modelSkins
+  -- Buffer instance joint matrices
+  bufferData 3 . SV.convert . V.concat
+    . fmap (fmap transpose . fold . instanceJointMatrices) $ instances
+  GL.bindBuffer GL.ShaderStorageBuffer $= Nothing
+  -- Render meshes
+  shouldRenderMeshes <- asks envRenderMeshes
+  let numInstances = length instances
+      numNodes = V.length modelNodes
+      numJoints = V.length . foldMap skinJoints $ modelSkins
+  when shouldRenderMeshes $
+    imapM_ (renderModelNode numInstances numNodes numJoints) modelNodes
  where
-  frustumCollision :: (Epsilon a, Floating a) => Frustum a -> Collision3D a
-  frustumCollision =
-    liftA2 CollisionPolyhedron frustumPoints frustumFaceNormals
+  bufferData :: (Storable a) => Int -> SV.Vector a -> Render ()
+  bufferData bindingIndex dat = do
+    buffer <- GL.genObjectName
+    GL.bindBuffer GL.ShaderStorageBuffer $= Just buffer
+    liftIO . SV.unsafeWith dat $ \ptr -> do
+      let size = fromIntegral . (* SV.length dat) . sizeOf
+                   $ (undefined :: ModelMatrix)
+      GL.bufferData GL.ShaderStorageBuffer
+        $= (size, ptr, GL.StaticDraw)
+    (GL.bindBufferBase GL.IndexedShaderStorageBuffer
+      . fromIntegral $ bindingIndex) $= Just buffer
+
+renderModelNode :: Int -> Int -> Int -> Int -> Node -> Render ()
+renderModelNode numinstances numNodes numJoints nodeId Node{..} = do
+  let skinId = fromMaybe (-1) nodeSkin
+  mapM_ (renderMeshPrimitive numinstances numNodes numJoints nodeId skinId)
+        nodeMesh
+
+renderMeshPrimitive :: Int -> Int -> Int -> Int -> Int -> MeshPrimitive -> Render ()
+renderMeshPrimitive numInstances numNodes numJoints nodeId skinId meshPrim = do
+  pipeline <- asks envPipeline
+  let Material{..} = meshPrimMaterial meshPrim
+  -- Number of model nodes + node id of mesh (for offset calculations)
+  pipelineUniform pipeline "numNodes" $= (fromIntegral numNodes :: GL.GLint)
+  pipelineUniform pipeline "nodeId" $= (fromIntegral nodeId :: GL.GLint)
+  -- Skin ID and number of joints in model
+  pipelineUniform pipeline "skinId" $= (fromIntegral skinId :: GL.GLint)
+  pipelineUniform pipeline "numJoints" $= (fromIntegral numJoints :: GL.GLint)
+  -- Base color
+  pipelineUniform pipeline "baseColorFactor"
+    $= toGlVector4 materialBaseColorFactor
+  pipelineUniform pipeline "hasBaseColorTexture"
+    $= maybe (0 :: GL.GLint) (const 1) materialBaseColorTexture
+  GL.activeTexture $= GL.TextureUnit baseColorTextureUnit
+  GL.textureBinding GL.Texture2D $= materialBaseColorTexture
+  -- Metallic/roughness
+  pipelineUniform pipeline "metallicFactor" $= materialMetallicFactor
+  pipelineUniform pipeline "roughnessFactor" $= materialRoughnessFactor
+  pipelineUniform pipeline "hasMetallicRoughnessTexture"
+    $= maybe (0 :: GL.GLint) (const 1) materialMetallicRoughnessTexture
+  GL.activeTexture $= GL.TextureUnit metallicRoughnessTextureUnit
+  GL.textureBinding GL.Texture2D $= materialMetallicRoughnessTexture
+  -- Normal mapping
+  pipelineUniform pipeline "normalTextureScale" $= materialNormalTextureScale
+  pipelineUniform pipeline "hasNormalTexture"
+    $= maybe (0 :: GL.GLint) (const 1) materialNormalTexture
+  GL.activeTexture $= GL.TextureUnit normalTextureUnit
+  GL.textureBinding GL.Texture2D $= materialNormalTexture
+  -- Alpha coverage
+  pipelineUniform pipeline "alphaCutoff" $= materialAlphaCutoff
+  pipelineUniform pipeline "alphaMode"
+    $= (fromIntegral . fromEnum $ materialAlphaMode :: GL.GLint)
+  -- Double-sidedness
+  pipelineUniform pipeline "doubleSided"
+    $= (fromIntegral . fromEnum $ materialDoubleSided :: GL.GLint)
+  -- Draw
+  GL.bindVertexArrayObject $= (Just . meshPrimVao $ meshPrim)
+  liftIO $ GL.drawElementsInstanced (meshPrimGlMode meshPrim)
+                                    (meshPrimNumIndices meshPrim)
+                                    GL.UnsignedInt
+                                    nullPtr
+                                    (fromIntegral numInstances)
+  -- Unbind
+  GL.bindVertexArrayObject $= Nothing
+  GL.activeTexture $= GL.TextureUnit baseColorTextureUnit
+  GL.textureBinding GL.Texture2D $= Nothing
+  GL.activeTexture $= GL.TextureUnit metallicRoughnessTextureUnit
+  GL.textureBinding GL.Texture2D $= Nothing
+  GL.activeTexture $= GL.TextureUnit normalTextureUnit
+  GL.textureBinding GL.Texture2D $= Nothing
