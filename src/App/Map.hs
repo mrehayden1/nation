@@ -33,6 +33,7 @@ import Linear
 import Numeric.Noise.Perlin
 
 import App.Geometry
+import App.Collision.AABB
 
 data MapGrid = Center | North | NorthEast | East | SouthEast | South
                  | SouthWest | West | NorthWest
@@ -56,6 +57,12 @@ data MapTree = MapTree {
   mapTreePosition :: V2 Float,
   mapTreeRotation :: Float
 }
+
+instance HasAABB MapTree (V3 Float) where
+  aabb tree =
+    let V2 x z = mapTreePosition tree
+        p = V3 x 0 z
+    in AABB (p + V3 (-15) 0 (-15)) (p + V3 15 0 15)
 
 -- The radius around of point of interest in which another can't exist
 poiDiscRadius :: Fractional a => a

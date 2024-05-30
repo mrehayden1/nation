@@ -15,8 +15,10 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Linear
 
+import App.Collision
+import App.Collision.AABB
+import App.Collision.BVH
 import App.Entity
-import App.Entity.Collision3D
 import App.Game hiding (Env)
 import App.Map
 import App.Matrix
@@ -32,7 +34,7 @@ import App.Render.UI
 import App.Vector
 
 createRenderer :: IORef POSIXTime
-                    -> IO (Frame -> Render ())
+                    -> IO (BVH MapTree (V3 Float) -> Frame -> Render ())
 createRenderer timeRef = do
   (shadowMapTexture, renderShadowMap) <- createShadowMapper
   renderScene <- createSceneRenderer shadowMapTexture
@@ -43,9 +45,9 @@ createRenderer timeRef = do
   overlayGizmo <- createDebugGizmoOverlayer
   -- TODO Move this lambda function to a definition
   -- React to changes in our Reflex application
-  return $ \frame@(_, Output{..}) -> do
+  return $ \treesBVH frame@(_, Output{..}) -> do
     let World{..} = outputWorld
-    scene <- cullScene =<< makeScene frame
+    scene <- cullScene =<< makeScene treesBVH frame
     renderShadowMap scene
     renderScene scene
     renderUi frame
@@ -55,11 +57,16 @@ createRenderer timeRef = do
       unless outputDebugQuadOverlay . overlayGizmo $ worldCamera
     when outputConsoleOpen $ overlayConsole frame
 
-makeScene :: Frame -> Render Scene
-makeScene (_, Output{..}) = do
+makeScene :: BVH MapTree (V3 Float) -> Frame -> Render Scene
+makeScene treeBVH (_, Output{..}) = do
+  aspectRatio <- asks viewportAspectRatio
   let World{..} = outputWorld
       App.Game.Daylight{..} = worldDaylight
-  treeInstances <- mapM treeInstance outputTrees
+      -- Roughly cull static map data using our BVH of AABBs and the camera
+      -- frustum AABB.
+      cameraAabb = aabb . cameraFrustum aspectRatio $ worldCamera
+      trees = query (intersecting cameraAabb) treeBVH
+  treeInstances <- mapM treeInstance trees
   peasantInstances <- mapM (peasantInstance worldAnimationTime) worldPeasants
   coinInstances <- mapM (coinInstance worldAnimationTime) worldCoins
   playerInstances <- fmap pure
@@ -158,20 +165,17 @@ cullScene scene@Scene{..} = do
       scene' = scene { sceneEntities = culledEntities }
   return scene'
  where
-  frustumCollision :: (Epsilon a, Floating a) => Frustum a -> Collision3D a
+  frustumCollision :: (Epsilon a, Floating a) => Frustum a -> Collision3 a
   frustumCollision =
     liftA2 CollisionPolyhedron frustumPoints frustumFaceNormals
 
-  cullInstances :: Collision3D Float
-    -> Entity
-    -> [Instance]
-    -> [Instance]
-  cullInstances frustum' entity = parFilter shouldRender
+  cullInstances :: Collision3 Float -> Entity -> [Instance] -> [Instance]
+  cullInstances frustum' entity = filter shouldRender
    where
     shouldRender :: Instance -> Bool
     shouldRender Instance{..} =
       maybe True
-            (collided3d frustum' . transformCollision3d instanceModelMatrix)
+            (collided3 frustum' . transformCollision3 instanceModelMatrix)
         . entityCullingBounds $ entity
 
   parFilter :: (a -> Bool) -> [a] -> [a]

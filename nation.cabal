@@ -26,10 +26,11 @@ library
   exposed-modules:
       App
       App.Camera
+      App.Collision
+      App.Collision.AABB
+      App.Collision.BVH
       App.Cursor
       App.Entity
-      App.Entity.Collision
-      App.Entity.Collision3D
       App.Env
       App.Game
       App.Game.Coins
@@ -74,8 +75,10 @@ library
       DataKinds
       DeriveGeneric
       FlexibleContexts
+      FlexibleInstances
       GeneralizedNewtypeDeriving
       LambdaCase
+      MultiParamTypeClasses
       OverloadedStrings
       PatternSynonyms
       RankNTypes
@@ -105,8 +108,10 @@ library
     , bytestring
     , containers
     , dependent-sum
+    , distributive
     , extra
     , filepath
+    , foldable1-classes-compat
     , gltf-loader
     , hgeometry
     , hgeometry-combinatorial
@@ -114,6 +119,7 @@ library
     , lens
     , linear
     , mtl
+    , parallel
     , ref-tf
     , reflex
     , reflex-glfw-simple
@@ -134,8 +140,10 @@ executable map-test
       DataKinds
       DeriveGeneric
       FlexibleContexts
+      FlexibleInstances
       GeneralizedNewtypeDeriving
       LambdaCase
+      MultiParamTypeClasses
       OverloadedStrings
       PatternSynonyms
       RankNTypes
@@ -168,8 +176,10 @@ executable nation
       DataKinds
       DeriveGeneric
       FlexibleContexts
+      FlexibleInstances
       GeneralizedNewtypeDeriving
       LambdaCase
+      MultiParamTypeClasses
       OverloadedStrings
       PatternSynonyms
       RankNTypes
@@ -182,7 +192,7 @@ executable nation
       TypeFamilies
       TypeOperators
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -O2 -threaded -rtsopts -with-rtsopts=-N -j
-  ghc-prof-options: -O2 -threaded -fprof-auto -rtsopts "-with-rtsopts=-N -p" -j
+  ghc-prof-options: -O2 -threaded -fprof-auto -rtsopts "-with-rtsopts=-N" -j
   build-depends:
       base >=4.7 && <5
     , nation

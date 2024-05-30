@@ -11,12 +11,14 @@ import qualified Data.Vector as V
 import Linear
 import Text.Printf
 
+import App.Collision
 import App.Entity
-import App.Entity.Collision3D
 import App.Render.Model
 import qualified App.Render.Model.GLTF.Material as Mat
 
-entityCullingBounds :: Fractional a => Entity -> Maybe (Collision3D a)
+-- Model space collision geometry for culling - should be transformed before
+-- use
+entityCullingBounds :: Fractional a => Entity -> Maybe (Collision3 a)
 entityCullingBounds =
   \case EntityOakTree -> Just $ CollisionSphere (V3 0 0 4.8692) 15
         _             -> Nothing

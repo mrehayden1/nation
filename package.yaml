@@ -36,8 +36,10 @@ default-extensions:
 - DataKinds
 - DeriveGeneric
 - FlexibleContexts
+- FlexibleInstances
 - GeneralizedNewtypeDeriving
 - LambdaCase
+- MultiParamTypeClasses
 - OverloadedStrings
 - PatternSynonyms
 - RankNTypes
@@ -60,8 +62,10 @@ library:
   - bytestring
   - containers
   - dependent-sum
+  - distributive
   - extra
   - filepath
+  - foldable1-classes-compat
   - GLFW-b
   - gltf-loader
   - hgeometry
@@ -75,6 +79,7 @@ library:
   - mtl
   - OpenGL
   - OpenGLRaw
+  - parallel
   - ref-tf
   - reflex
   - reflex-glfw-simple
@@ -97,7 +102,7 @@ executables:
       -threaded
       -fprof-auto
       -rtsopts
-      "-with-rtsopts=-N -p"
+      "-with-rtsopts=-N"
       -j
     source-dirs:         src-exe/Game
     dependencies:

@@ -14,9 +14,11 @@ module App.Projection (
 ) where
 
 import Control.Lens
+import Data.List.NonEmpty as NE
 import Linear
 
 import App.Camera as Cam
+import App.Collision.AABB
 import App.Vector
 
 data Frustum a = Frustum {
@@ -29,6 +31,10 @@ data Frustum a = Frustum {
   frustumLeftBottomBack   :: V3 a,
   frustumLeftBottomFront  :: V3 a
 } deriving (Show)
+
+instance Ord a => HasAABB (Frustum a) (V3 a) where
+  aabb (Frustum a b c d e f g h) =
+    fromVertices . NE.fromList $ [a, b, c, d, e, f, g, h]
 
 transformFrustum :: (Fractional a) => M44 a -> Frustum a -> Frustum a
 transformFrustum m Frustum{..} = Frustum {

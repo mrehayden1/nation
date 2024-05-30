@@ -9,8 +9,8 @@ import Data.Tuple.Extra
 import Linear
 import Reflex
 
+import App.Collision
 import App.Entity
-import App.Entity.Collision
 import App.Env
 import App.Matrix
 import App.Output
@@ -67,9 +67,9 @@ coins rClickE playerPosition playerDirection = do
         (V3 px _ pz) = pos
         (V3 dx _ dz) = dir
         rot = atan (dz/dx)
-    in transformCollision transform' playerCoinPickupCollision
+    in transformCollision2 transform' playerCoinPickupCollision
 
-  findCollectedCoinsI :: [Coin] -> Float -> Collision Float -> [Int]
+  findCollectedCoinsI :: [Coin] -> Float -> Collision2 Float -> [Int]
   findCollectedCoinsI cs time pickupCollision =
     fmap fst . filter (shouldCollect . snd) . zip [0..] $ cs
    where
@@ -78,5 +78,5 @@ coins rClickE playerPosition playerDirection = do
       coinCollided
     coinCollided :: Coin -> Bool
     coinCollided Coin{..} =
-      collided pickupCollision . flip transformCollision coinCollision
+      collided2 pickupCollision . flip transformCollision2 coinCollision
         . translate2D . (^. _xz) $ coinPosition

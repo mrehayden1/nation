@@ -8,8 +8,8 @@ import Data.List (sortBy)
 import Linear
 import Reflex
 
+import App.Collision
 import App.Entity
-import App.Entity.Collision
 import App.Env
 import App.Input
 import App.Output
@@ -74,7 +74,7 @@ peasants coins = do
     coinCollided :: Coin -> Bool
     coinCollided Coin{..} =
       let V3 x _ z = coinPosition
-      in collided peasantCollision' . flip transformCollision coinCollision
+      in collided2 peasantCollision' . flip transformCollision2 coinCollision
           . translate2D $ V2 x z
 
   transformPeasantCollision pos dir =
@@ -82,4 +82,4 @@ peasants coins = do
         (V3 px _ pz) = pos
         (V3 dx _ dz) = dir
         rot = atan (dz/dx)
-    in transformCollision transform peasantCoinVision
+    in transformCollision2 transform peasantCoinVision

@@ -2,6 +2,7 @@ module App (
   start
 ) where
 
+import Control.Applicative
 import Control.Exception
 import Control.Monad
 import Control.Monad.Reader
@@ -13,6 +14,7 @@ import Reflex.GLFW.Simple
 import Reflex.Host.Headless
 import Reflex.Network
 
+import App.Collision.BVH as BVH
 import App.Env
 import App.Game
 import App.Map
@@ -41,8 +43,11 @@ createRenderEnv = do
 start :: IO ()
 start = do
   let seed = -662982938059047685
-      mapData = generateTestMapGeometry seed
+      MapData{..} = generateTestMapGeometry seed
   putStrLn $ "Starting " ++ appName ++ "..."
+  -- Build the BVH of static map geometry
+  let treesAndBounds = fmap (liftA2 (,) id aabb) mapTrees
+      mapBVH = BVH.create' spatialBisection treesAndBounds
   bracket (initWindow appName) closeWindow $ \win -> do
     -- Used to get the time the frame was last refreshed
     timeRef <- newIORef 0
@@ -80,7 +85,7 @@ start = do
             envWindowHeight = windowHeight,
             envWindowWidth = windowWidth
           }
-      frameE <- fmap updated . flip runReaderT appEnv $ game mapData
+      frameE <- fmap updated . flip runReaderT appEnv $ game
       let shouldExitE = void . ffilter id . fmap (outputShouldExit . snd)
                           $ frameE
           shutdownE = leftmost [shouldExitE, windowClose]
@@ -88,7 +93,8 @@ start = do
         . fmap (progressFrame startTime timeRef
                               (liftIO . tickTrigger)
                               (\frame -> liftIO $ do
-                                 flip runRender renderEnv . renderFrame $ frame
+                                 flip runRender renderEnv
+                                   . renderFrame mapBVH $ frame
                                  swapBuffers win)
                )
         $ frameE
