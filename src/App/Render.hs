@@ -34,7 +34,7 @@ import App.Render.UI
 import App.Vector
 
 createRenderer :: IORef POSIXTime
-                    -> IO (BVH MapTree (V3 Float) -> Frame -> Render ())
+  -> IO (BVH MapTree (V3 Float) -> Frame -> Render ())
 createRenderer timeRef = do
   (shadowMapTexture, renderShadowMap) <- createShadowMapper
   renderScene <- createSceneRenderer shadowMapTexture
@@ -150,8 +150,8 @@ makeInstance model@Model{..} rotation translation' animation =
   -- has skinned meshes or not, so make joint matrices for each node if it has a skin, otherwise default to
   -- identity
   makeJointMatrices :: Vector (M44 Float) -> Skin -> Vector (M44 Float)
-  makeJointMatrices globalTransforms skin =
-    let ts       = fmap (globalTransforms V.!) . skinJoints $ skin
+  makeJointMatrices transformations skin =
+    let ts       = fmap (transformations V.!) . skinJoints $ skin
         invBinds = skinInverseBindMatrices skin
     in V.zipWith (!*!) ts invBinds
 

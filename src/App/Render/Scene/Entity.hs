@@ -14,6 +14,7 @@ import Text.Printf
 import App.Collision
 import App.Entity
 import App.Render.Model
+import App.Render.Model.GLTF as GLTF
 import qualified App.Render.Model.GLTF.Material as Mat
 
 -- Model space collision geometry for culling - should be transformed before
@@ -100,7 +101,7 @@ loadGrass = do
 loadModel :: FilePath -> IO Model
 loadModel pathname = do
   printFileName pathname
-  fromGlbFile pathname
+  GLTF.fromGlbFile pathname
 
 printFileName :: FilePath -> IO ()
 printFileName = printf "Loading model \"%s\"...\n"

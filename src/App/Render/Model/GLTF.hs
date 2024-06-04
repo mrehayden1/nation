@@ -15,9 +15,9 @@ import Linear
 import Text.GLTF.Loader (Gltf(..))
 import qualified Text.GLTF.Loader as G
 
-import qualified App.Render.Model.GLTF.Material as M
+import qualified App.Render.Model.GLTF.Material as Mat
 import App.Render.Model.GLTF.Texture as GT
-import App.Render.Model.Model
+import App.Render.Model
 
 fromGlbFile :: FilePath -> IO Model
 fromGlbFile pathname = do
@@ -31,7 +31,7 @@ fromGlbFile pathname = do
   textures <- mapM (uncurry $ loadTexture gltfImages gltfSamplers)
                 . V.imap (\i t -> (i `elem` baseColorTextureIxs, t))
                 $ gltfTextures
-  let materials = fmap (M.adaptMaterial textures) gltfMaterials
+  let materials = fmap (Mat.adaptMaterial textures) gltfMaterials
   meshes <- mapM (mapM (loadMeshPrimitive materials) . G.meshPrimitives)
               gltfMeshes
   let nodes = makeNodes gltfNodes gltfAnimations meshes

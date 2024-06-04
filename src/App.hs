@@ -19,7 +19,7 @@ import App.Env
 import App.Game
 import App.Map
 import App.Render
-import App.Render.Model
+import App.Render.Model.GLTF as GLTF
 import App.Render.Scene.Entity
 import App.Window
 
@@ -29,7 +29,7 @@ appName = "Nation"
 createRenderEnv :: IO App.Render.Env
 createRenderEnv = do
   models <- loadModels
-  jointModel <- fromGlbFile "assets/models/joint.glb"
+  jointModel <- GLTF.fromGlbFile "assets/models/joint.glb"
   return $ App.Render.Env {
     envJointModel = jointModel,
     envModels = models,

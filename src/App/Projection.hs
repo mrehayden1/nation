@@ -142,7 +142,6 @@ directionalLightViewMatrix :: (Epsilon a, Floating a)
   -> a
   -> M44 a
 directionalLightViewMatrix camera pitch yaw aspectRatio =
-  -- TODO Make a function of the camera view
   let dir    = eulerDirection pitch yaw
       -- the 'centre' to which the camera is looking
       centre = (/ 8) . sum . frustumPoints . cameraFrustum aspectRatio

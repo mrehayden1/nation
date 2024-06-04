@@ -27,6 +27,7 @@ import App.Matrix
 import App.Projection
 import App.Render.Env
 import App.Render.Model
+import App.Render.Model.GLTF as GLTF
 import App.Render.Pipeline
 import App.Render.Text
 import App.Render.Util
@@ -72,7 +73,7 @@ createDebugGizmoOverlayer = do
       ("debug/gizmo", GL.VertexShader)
     ]
   -- Load gizmo
-  model <- fromGlbFile "assets/models/reference_frame.glb"
+  model <- GLTF.fromGlbFile "assets/models/reference_frame.glb"
   return $ \camera -> local (set _envPipeline pipeline) $ do
     liftIO . bindPipeline $ pipeline
     let cameraViewM = Cam.toViewMatrix camera :: M44 GL.GLfloat

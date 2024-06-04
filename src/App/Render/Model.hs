@@ -1,6 +1,5 @@
 module App.Render.Model (
   module App.Render.Model.Model,
-  module App.Render.Model.GLTF,
 
   Node(..),
   MeshPrimitive(..),
@@ -30,7 +29,6 @@ import qualified Text.GLTF.Loader as G
 
 import App.Matrix
 import App.Render.Model.Model
-import App.Render.Model.GLTF
 
 type Animation = (AnimationName, AnimationDuration, AnimationTime)
 type AnimationName = Text
