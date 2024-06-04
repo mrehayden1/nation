@@ -31,24 +31,24 @@ displayMapGeometry = do
         Scale 1 (-1)
           . Pictures $ [
               -- Points
-              Pictures . fmap mkPointText $ mapGraphNodes,
-              Pictures . fmap (mkPoint 10) $ mapGraphNodes,
+              Pictures . fmap drawPointText $ mapGraphNodes,
+              Pictures . fmap (drawPoint 10) $ mapGraphNodes,
               -- Edges
-              --Pictures . fmap (uncurry mkLine) $ mapGraphEdges,
+              --Pictures . fmap (uncurry drawLine) $ mapGraphEdges,
               -- Poisson discs
-              --Pictures . fmap (mkDisc poiDiscRadius) $ mapGraphNodes,
+              --Pictures . fmap (drawDisc poiDiscRadius) $ mapGraphNodes,
               -- Room generatable area
-              --Pictures . fmap (mkDisc (poiDiscRadius / 2)) $ mapGraphNodes,
+              --Pictures . fmap (drawDisc (poiDiscRadius / 2)) $ mapGraphNodes,
               -- Grid lines
-              --Pictures . fmap (uncurry mkLine) $ gridLines,
+              --Pictures . fmap (uncurry drawLine) $ gridLines,
               -- Shapes
               --Pictures . fmap drawPolygon $ mapRoomGeometry,
               -- Paths
               --Pictures . fmap drawPolygon $ mapPathGeometry
               -- Mesh
-              drawPolygon mapMesh,
+              drawTristrip mapMesh,
               -- Trees
-              Pictures . fmap (mkPoint 50 . mapTreePosition) $ mapTrees
+              Pictures . fmap (drawPoint 50 . mapTreePosition) $ mapTrees
             ]
   --printf "Seed: %d\n" seed
   display
@@ -69,33 +69,42 @@ displayMapGeometry = do
 drawPolygon :: Polygon Float -> Picture
 drawPolygon p =
   Pictures [
-    Pictures . fmap mkShape . polygonFaces $ p,
-    Pictures . fmap (Pictures . fmap (mkPoint 10)) . polygonFaces $ p,
-    Pictures . fmap mkShape . polygonHoles $ p,
-    Pictures . fmap (Pictures . fmap (mkPoint 10)) . polygonHoles $ p
+    Pictures . fmap drawShape . polygonFaces $ p,
+    Pictures . fmap (Pictures . fmap (drawPoint 10)) . polygonFaces $ p,
+    Pictures . fmap drawShape . polygonHoles $ p,
+    Pictures . fmap (Pictures . fmap (drawPoint 10)) . polygonHoles $ p
   ]
 
-mkLine :: V2 Float -> V2 Float -> Picture
-mkLine x y = Color (dark white) . Line . fmap (vec2ToTuple . (* height))
+drawTristrip :: Tristrip Float -> Picture
+drawTristrip = Pictures . fmap drawStrip . unTristrip
+ where
+  drawStrip t =
+    Pictures . zipWith3 drawTriangle t (drop 1 t) $ (drop 2 t)
+
+drawLine :: V2 Float -> V2 Float -> Picture
+drawLine x y = Color (dark white) . Line . fmap (vec2ToTuple . (* height))
                $ [x, y]
 
-mkPointText :: V2 Float -> Picture
-mkPointText (V2 x y) = Translate (x * height) (y * height) . Color (dark white)
+drawPointText :: V2 Float -> Picture
+drawPointText (V2 x y) = Translate (x * height) (y * height) . Color (dark white)
   . Text . printf "%.10f, %.10f" x $ y
 
-mkPoint :: Float -> V2 Float -> Picture
-mkPoint sz = Color (dark white) . ($ ThickCircle sz (sz * 2))
+drawPoint :: Float -> V2 Float -> Picture
+drawPoint sz = Color (dark white) . ($ ThickCircle sz (sz * 2))
   . uncurry Translate . vec2ToTuple . (* height)
 
-mkDisc :: Float -> V2 Float -> Picture
-mkDisc r = Color (dark white) . ($ Circle (r * height))
+drawDisc :: Float -> V2 Float -> Picture
+drawDisc r = Color (dark white) . ($ Circle (r * height))
   . uncurry Translate . vec2ToTuple . (* height)
 
-mkShape :: [V2 Float] -> Picture
-mkShape vs = Pictures . fmap (uncurry mkLine) . zip vs . drop 1 . cycle $ vs
+drawShape :: [V2 Float] -> Picture
+drawShape vs = Pictures . fmap (uncurry drawLine) . zip vs . drop 1 . cycle $ vs
 
-mkPolyline :: [V2 Float] -> Picture
-mkPolyline ps = Pictures . fmap (uncurry mkLine) . zip ps . drop 1 $ ps
+drawPolyline :: [V2 Float] -> Picture
+drawPolyline ps = Pictures . fmap (uncurry drawLine) . zip ps . drop 1 $ ps
+
+drawTriangle :: V2 Float -> V2 Float -> V2 Float -> Picture
+drawTriangle a b c = drawPolyline [a, b, c, a]
 
 vec2ToTuple :: V2 a -> (a, a)
 vec2ToTuple (V2 x y) = (x, y)

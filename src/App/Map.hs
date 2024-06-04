@@ -49,7 +49,7 @@ data MapData = MapData {
   mapGraph :: MapGraph,
   mapRoomGeometry :: [Polygon Float],
   mapPathGeometry :: [Polygon Float],
-  mapMesh :: Polygon Float,
+  mapMesh :: Tristrip Float,
   mapTrees :: [MapTree]
 }
 
@@ -78,8 +78,9 @@ generateTestMapGeometry seed = flip evalRand (mkStdGen seed) $ do
   rooms <- mapM perlinLoop [start, end]
   let graph = MapGraph [start, end] [(start, end)]
       paths = [path]
-      mesh = foldl' (\/) (App.Geometry.Polygon [] []) $ rooms ++ paths
-  trees <- generateTrees mesh
+      shape = foldl' union (App.Geometry.Polygon [] []) $ rooms ++ paths
+      mesh = toTristrip shape
+  trees <- generateTrees shape
   return . MapData graph rooms paths mesh $ trees
  where
   spread = 50
@@ -90,8 +91,9 @@ generateMapGeometry seed = flip evalRand (mkStdGen seed) $ do
   graph@MapGraph{..} <- generateMapGraph
   rooms <- mapM perlinLoop mapGraphNodes
   paths <- mapM (uncurry perlinPath) mapGraphEdges
-  let mesh = foldl' (\/) (App.Geometry.Polygon [] []) $ rooms ++ paths
-  trees <- generateTrees mesh
+  let shape = foldl' union (App.Geometry.Polygon [] []) $ rooms ++ paths
+      mesh = toTristrip shape
+  trees <- generateTrees shape
   return . MapData graph rooms paths mesh $ trees
 
 generateTrees :: forall g. RandomGen g
@@ -105,16 +107,16 @@ generateTrees geometry = do
  where
   -- Tree density
   n :: forall n. Num n => n
-  n = 25
+  n = 10 * 20
 
   ps = fmap ((* (2 * treeCoverage)) . subtract 0.5 . (/ n) . fromIntegral)
             [0..n :: Int]
 
   -- The radius within the level geometry trees should be generated
-  treeDisc = 25
+  treeDisc = 15 * 20
   -- The range in each axis over which we should generate tree geometry +/- in
   -- each axis
-  treeCoverage = 100
+  treeCoverage = 30 * 20
 
   test = liftA2 (&&)
                 (not . pointInPolygon geometry)
@@ -181,7 +183,7 @@ perlinLoop c = do
     in (+ c) . (*^ circlePoint t) . (+ roomSize) . (* roomDeviation)
          . circularPerlin p $ t
 
-  roomSize = 25
+  roomSize = 20
   roomDeviation = 2
 
   -- Number of points in the loop
