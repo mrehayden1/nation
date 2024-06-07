@@ -179,15 +179,31 @@ void main()
 
   float NdotL = max(dot(N, L), 0.0);
   float shadow = ShadowCalculation(LightClipPos);
-  vec3 Lo = (1 - shadow) * (kD * baseColor.rgb / PI + specular) * radiance * NdotL;
+  vec3 Lo = (1 - shadow) * (kD * baseColor.rgb / PI + specular) * radiance
+              * NdotL;
 
-  // TODO Ambient occlusion
   vec3 ambient = daylightIntensity * lightColour * baseColor.rgb;// * ao;
 
-  vec3 lighting = ambient + Lo;
+  vec3 lighting = 10 * ambient + 5 * Lo;
 
-  // Tone mapping
+  // Exposure
+  float exposure = 0.7;
+  lighting = lighting * exposure;
+
+  // TODO White balance
+
+  // Reinhard tone mapping
   lighting = lighting / (lighting + vec3(1.0));
+
+  // Contrast
+  float contrast = 0.95;
+  float brightness = -0.05;
+  lighting = contrast * (lighting - 0.5) + 0.5 + brightness;
+
+  // Saturation
+  float saturation = 1.1;
+  float greyscale = dot(lighting, vec3(0.299, 0.587, 0.114));
+  lighting = mix(vec3(greyscale), lighting, saturation);
 
   // Gamma correction
   float gamma = 2.2;
