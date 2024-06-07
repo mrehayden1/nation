@@ -14,6 +14,7 @@ import Control.Monad
 import Data.Fixed
 import Data.Functor
 import Data.List (delete, insert)
+import qualified Data.List.NonEmpty as NE
 import Data.Tuple.Extra
 import qualified Graphics.UI.GLFW as GLFW
 import Linear
@@ -69,7 +70,7 @@ game :: forall t. App t (Dynamic t Frame)
 game = do
   inputE <- asks envInputE
   deltaT <- holdDyn 0 . fmap inputDeltaT $ inputE
-  animationT <- foldDyn (+) 0 . fmap inputDeltaT $ inputE
+  time <- foldDyn (+) 0 . fmap inputDeltaT $ inputE
   -- Keys
   (keyPresses, heldKeys) <- keys inputE
   -- Mouse buttons
@@ -117,21 +118,22 @@ game = do
   debugCam <- debugCamera deltaT playerCamera debugCameraOn heldKeys cursor
   let camera = debugCameraOn >>= \d -> if d then debugCam else playerCamera
   -- Lighting
-  sunPitch <- foldDyn updateSunPitch pi . updated $ deltaT
-  let lightIntensity = fmap ((+ 0.5) . (* 0.5) . max 0 . sin)
-                            sunPitch
-      lightGreen = fmap ((+ 0.6) . (* 0.4)) lightIntensity
-      lightColour = V3 1 <$> lightGreen <*> lightIntensity
+      (sunPitch, sunYaw) = NE.unzip . fmap calcSunPitchAndYaw $ time
+      -- Shape the light intensity so it stays brighter for longer
+  let lightIntensity = fmap ((+ 0.1) . (* 0.9) . max 0 . sin) sunPitch
+      lightGreen = fmap ((+ 0.4) . (* 0.5)) lightIntensity
+      --lightColour = V3 1 <$> lightGreen <*> lightIntensity
+      lightColour = 1
   -- Coins
   (looseCoins, playerCoins) <- coins rClickE playerPosition playerDirection
   -- Peasants
   peasants' <- peasants looseCoins
   -- Output
   let worldState = World
-        <$> animationT
+        <$> time
         <*> camera
         <*> looseCoins
-        <*> (Daylight <$> lightColour <*> lightIntensity <*> sunPitch <*> pure (pi / 8))
+        <*> (Daylight <$> lightColour <*> lightIntensity <*> sunPitch <*> sunYaw)
         <*> peasants'
         <*> playerCoins
         <*> playerDirection
@@ -183,10 +185,29 @@ game = do
          camYaw = pi / 2
        }
 
-  updateSunPitch :: Float -> Float -> Float
-  updateSunPitch dt pitch = (+ pitch) . (* angularVelocity) $ dt
+  calcSunPitchAndYaw :: Float -> (Float, Float)
+  calcSunPitchAndYaw t = (elevation, yaw)
    where
-    angularVelocity = -(2 * pi) / (5 * 60)
+    -- Use the square cosine for the sun angular velocity, making noon appear
+    -- very long.
+    dayLength = 5 * 60 -- full day cycle, in seconds
+    -- Offset game time by a small amoutn so t=0 is roughly at sunrise.
+    offset = 1 / 8
+    t' = mod' t dayLength / dayLength + offset
+    --hourAngle = 2 * pi * t'
+    hourAngle = 2 * ((2 * pi * t' / 2) + sin (2 * pi * t') / 2) - pi
+    latitude = 41
+    l = latitude * pi / 180
+    -- Use the sun position formula with a declination angle of zero so the sun
+    -- rises exactly opposite where it sets.
+    elevation = asin $ cos l * cos hourAngle
+    a = acos $ - sin l * cos hourAngle / cos elevation
+    azimuth = if hourAngle < 0 then a else 2 * pi - a
+    -- Offset north a little
+    northYawOffset = pi / 6
+    -- Yaw is measured anti-clockwise around y from positive x / East, while
+    -- azimuth is measured clockwise from negative z / North.
+    yaw = - azimuth + pi / 2 + northYawOffset
 
   debugCamera :: Dynamic t Float
     -> Dynamic t (Camera Float)
